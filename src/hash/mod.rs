@@ -4,6 +4,7 @@ use std::{
   borrow::Cow,
   fmt::{self, Debug},
   fs::File,
+  hash,
   ops::Deref,
   path::Path,
   str::FromStr,
@@ -76,7 +77,7 @@ impl Hash {
         Some(ht) => {
           if s.contains(|x| x == ':' || x == '-') {
             let h = Self::decode(s)?;
-            ensure!(h.ty() == ht, "hash has wrong type");
+            ensure!(h.ty() == ht, "expected hash type {}, got {}", ht, h.ty());
             Ok(h)
           } else {
             Self::decode_with_type(s, ht, false)
@@ -192,8 +193,8 @@ impl PartialEq for Hash {
 
 impl Eq for Hash {}
 
-impl std::hash::Hash for Hash {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl hash::Hash for Hash {
+  fn hash<H: hash::Hasher>(&self, state: &mut H) {
     self.as_bytes().hash(state)
   }
 }
