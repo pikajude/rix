@@ -121,6 +121,7 @@ fn parse_output<S: Store + ?Sized>(
 }
 
 struct Parser<'input> {
+  #[deprecated = "use the input() method"]
   _input: &'input str,
   pos: usize,
 }
@@ -129,6 +130,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl<'input> Parser<'input> {
   fn new(input: &'input str) -> Self {
+    #[allow(deprecated)]
     Self {
       _input: input,
       pos: 0,
@@ -136,11 +138,12 @@ impl<'input> Parser<'input> {
   }
 
   fn input(&self) -> &'input str {
+    #[allow(deprecated)]
     &self._input[self.pos..]
   }
 
   fn expect<P: Pattern<'input> + Display + Copy>(&mut self, pat: P) -> Result<&'input str> {
-    if let Some(inp) = self._input.strip_prefix(pat) {
+    if let Some(inp) = self.input().strip_prefix(pat) {
       self.pos += inp.len();
       Ok(inp)
     } else {
