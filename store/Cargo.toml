@@ -1,0 +1,21 @@
+[package]
+name = "rix-store"
+version = "0.1.0"
+authors = ["Jude Taylor <me@jude.xyz>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.34"
+base64 = "0.13.0"
+binascii = "0.1.4"
+derive_more = "0.99.11"
+enum-as-inner = "0.3.3"
+lazy_static = "1.4.0"
+parking_lot = "0.11.1"
+rust-crypto = "0.2.36"
+thiserror = "1.0.22"
+
+[dev-dependencies]
+assert_matches = "1.4.0"
+hex = "0.4.2"
+proptest = "0.10.1"
