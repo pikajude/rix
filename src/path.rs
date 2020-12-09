@@ -17,7 +17,7 @@ lazy_static! {
   };
 }
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Display)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Display, Hash)]
 #[display(fmt = "{}-{}", hash, name)]
 pub struct Path {
   hash: Hash,
@@ -48,6 +48,13 @@ impl Path {
 
   pub fn is_derivation(&self) -> bool {
     self.name.ends_with(".drv")
+  }
+
+  pub fn derivation_name(&self) -> Result<&str> {
+    self
+      .name
+      .strip_suffix(".drv")
+      .ok_or_else(|| anyhow!("store path does not refer to a derivation"))
   }
 }
 

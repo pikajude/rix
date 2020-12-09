@@ -60,7 +60,13 @@ pub trait Store: Send + Sync {
 
   fn compute_fs_closure(&self, path: &StorePath, closure: &mut StorePathSet) -> Result<()>;
 
+  /// Parse a derivation. The given path must be registered as valid in the
+  /// database.
   fn read_derivation(&self, path: &StorePath) -> Result<Derivation>;
+
+  /// Like `read_derivation`, but accepts a path that might not be in the Nix
+  /// database yet.
+  fn read_invalid_derivation(&self, path: &StorePath) -> Result<Derivation>;
 
   fn make_store_path<T: AsRef<str>, N: AsRef<str>>(
     &self,
@@ -76,9 +82,7 @@ pub trait Store: Send + Sync {
       self.store_path().display(),
       name
     );
-    let hash = Hash::hash(&ident, HashType::SHA256)
-      .truncate(20)
-      .into_owned();
+    let hash = Hash::hash(&ident, HashType::SHA256).truncate(20);
     StorePath::from_parts(hash.as_bytes(), name)
   }
 
@@ -157,7 +161,7 @@ pub trait Store: Send + Sync {
     refs.extend(derivation.input_derivations.keys().cloned());
 
     let suffix = format!("{}.drv", derivation.name);
-    let contents = derivation.unparse(self, false, None).to_string();
+    let contents = derivation.print(self, false, None).to_string();
 
     if read_only {
       self.store_path_for_text(suffix, contents, &refs)
@@ -175,7 +179,7 @@ pub trait Store: Send + Sync {
       DerivationType::Fixed => {
         let mut output_hashes = HashMap::new();
         for (name, output) in derivation.outputs.iter() {
-          let (out_hash, out_path) = output
+          let out_hash = output
             .as_fixed()
             .ok_or_else(|| anyhow!("fixed-output derivations must only have fixed outputs"))?;
           let hash = Hash::hash(
@@ -183,7 +187,7 @@ pub trait Store: Send + Sync {
               "fixed:out:{method}:{hash}:{path}",
               method = out_hash.method_algo(),
               hash = out_hash.hash.encode(Encoding::Base16),
-              path = self.print_store_path(out_path)
+              path = self.print_store_path(&out_hash.store_path(self, &derivation.name, name)?)
             ),
             HashType::SHA256,
           );
@@ -220,13 +224,26 @@ pub trait Store: Send + Sync {
 
     Ok(HashModulo::Normal(Hash::hash(
       derivation
-        .unparse(self, mask_outputs, Some(inputs2))
+        .print(self, mask_outputs, Some(inputs2))
         .to_string(),
       HashType::SHA256,
     )))
   }
 
-  fn path_derivation_modulo(&self, drv_path: &StorePath) -> Result<HashModulo>;
+  fn path_derivation_modulo(&self, drv_path: &StorePath) -> Result<HashModulo> {
+    if let Some(m) = derivation::DRV_HASHES.lock().get(drv_path).cloned() {
+      return Ok(m);
+    }
+
+    let drv = self.read_invalid_derivation(drv_path)?;
+    let hash = self.hash_derivation_modulo(&drv, false)?;
+
+    derivation::DRV_HASHES
+      .lock()
+      .insert(drv_path.clone(), hash.clone());
+
+    Ok(hash)
+  }
 
   fn add_text_to_store<N: AsRef<str>, C: AsRef<str>>(
     &self,

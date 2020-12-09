@@ -1,7 +1,6 @@
 use crate::prelude::*;
 use crypto::digest::Digest;
 use std::{
-  borrow::Cow,
   fmt::{self, Debug},
   fs::File,
   hash,
@@ -169,19 +168,19 @@ impl Hash {
     }
   }
 
-  pub fn truncate(&self, new_size: usize) -> Cow<Self> {
+  pub fn truncate(&self, new_size: usize) -> Self {
     if new_size >= self.len {
-      return Cow::Borrowed(self);
+      return *self;
     }
     let mut data = [0; 64];
     for i in 0..self.len {
       data[i % new_size] ^= self.data[i];
     }
-    Cow::Owned(Self {
+    Self {
       len: new_size,
       data,
       ty: self.ty,
-    })
+    }
   }
 }
 

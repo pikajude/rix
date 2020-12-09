@@ -1,7 +1,9 @@
 pub use crate::{
   base32,
-  hash::{self, Hash},
+  derivation::{Derivation, DerivationType, HashModulo, Output},
+  hash::{self, Encoding, Hash},
   path::{Hash as StorePathHash, Path as StorePath},
+  Store,
 };
 pub use anyhow::{Context as _, Result};
 use std::str::pattern::{Pattern, Searcher};

@@ -1,11 +1,17 @@
 use crate::{prelude::*, FileIngestionMethod, HashType};
-pub use parse::Print;
+use parking_lot::Mutex;
+pub use print::Print;
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   path::PathBuf,
 };
 
 mod parse;
+mod print;
+
+lazy_static! {
+  pub(crate) static ref DRV_HASHES: Mutex<HashMap<StorePath, HashModulo>> = Default::default();
+}
 
 #[derive(Debug, Eq, PartialEq, Clone, EnumAsInner)]
 pub enum HashModulo {
@@ -24,14 +30,39 @@ impl FixedOutputHash {
   pub fn method_algo(&self) -> String {
     format!("{}{}", self.method.prefix(), self.hash.ty())
   }
+
+  pub fn store_path<S: Store + ?Sized>(
+    &self,
+    store: &S,
+    drv_name: &str,
+    output_name: &str,
+  ) -> Result<StorePath> {
+    store.make_fixed_output_path(
+      self.method,
+      self.hash,
+      output_path_name(drv_name, output_name),
+      &Default::default(),
+      false,
+    )
+  }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, EnumAsInner)]
 pub enum Output {
   InputAddressed(StorePath),
-  Fixed(FixedOutputHash, StorePath),
+  Fixed(FixedOutputHash),
   Floating(FileIngestionMethod, HashType),
   Deferred,
+}
+
+fn output_path_name(drv_name: impl AsRef<str>, output_name: impl AsRef<str>) -> String {
+  let drv_name = drv_name.as_ref();
+  let output_name = output_name.as_ref();
+  if output_name == "out" {
+    drv_name.to_string()
+  } else {
+    format!("{}-{}", drv_name, output_name)
+  }
 }
 
 #[derive(Default, Debug, Clone)]
