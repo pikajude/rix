@@ -5,16 +5,3 @@ authors = ["Jude Taylor <me@jude.xyz>"]
 edition = "2018"
 
 [dependencies]
-codespan = "0.11.0"
-derive_more = "0.99.11"
-enum-as-inner = "0.3.3"
-lalrpop-util = "0.19.1"
-lazy_static = "1.4.0"
-parking_lot = "0.11.1"
-path_abs = "0.5.0"
-regex = "1.4.2"
-string_cache = "0.8.1"
-thiserror = "1.0.22"
-
-[build-dependencies]
-lalrpop = "0.19.1"

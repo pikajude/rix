@@ -1,8 +1,18 @@
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate thiserror;
+
+pub use codespan::{FileId, Files, Span};
+pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+use parking_lot::Mutex;
 use std::fmt::{self, Debug, Display, Formatter};
 
-mod generated {
-  #![allow(clippy::all)]
-  include!(concat!(env!("OUT_DIR"), "/parse.rs"));
+pub mod error;
+
+pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
+
+lazy_static! {
+  #[doc(hidden)]
+  pub static ref FILES: Mutex<Files<String>> = Default::default();
 }
 
 #[derive(Clone)]
@@ -21,7 +31,7 @@ impl<T> Located<T> {
 }
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Hash)]
-pub struct Pos(pub codespan::FileId, pub codespan::Span);
+pub struct Pos(pub FileId, pub Span);
 
 impl Debug for Pos {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -31,7 +41,7 @@ impl Debug for Pos {
 
 impl Display for Pos {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    let files = super::FILES.lock();
+    let files = FILES.lock();
     let filename = files.name(self.0);
     let loc1 = files.location(self.0, self.1.start()).unwrap();
     let loc2 = files.location(self.0, self.1.end()).unwrap();
@@ -49,7 +59,7 @@ impl Display for Pos {
 
 impl Pos {
   pub fn none() -> Self {
-    Self(unsafe { std::mem::transmute(1) }, codespan::Span::initial())
+    Self(unsafe { std::mem::transmute(1) }, Span::initial())
   }
 }
 

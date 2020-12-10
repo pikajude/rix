@@ -591,24 +591,13 @@ version = "0.1.0"
 dependencies = [
  "rix-eval",
  "rix-store",
+ "rix-syntax",
+ "rix-util",
 ]
 
 [[package]]
 name = "rix-eval"
 version = "0.1.0"
-dependencies = [
- "codespan",
- "derive_more",
- "enum-as-inner",
- "lalrpop",
- "lalrpop-util",
- "lazy_static",
- "parking_lot",
- "path_abs",
- "regex",
- "string_cache",
- "thiserror",
-]
 
 [[package]]
 name = "rix-store"
@@ -622,6 +611,38 @@ dependencies = [
  "lazy_static",
  "parking_lot",
  "rust-crypto",
+ "thiserror",
+]
+
+[[package]]
+name = "rix-syntax"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "codespan",
+ "derive_more",
+ "enum-as-inner",
+ "itertools",
+ "lalrpop",
+ "lalrpop-util",
+ "lazy_static",
+ "parking_lot",
+ "path_abs",
+ "regex",
+ "rix-util",
+ "string_cache",
+ "thiserror",
+]
+
+[[package]]
+name = "rix-util"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "codespan",
+ "codespan-reporting",
+ "lazy_static",
+ "parking_lot",
  "thiserror",
 ]
 

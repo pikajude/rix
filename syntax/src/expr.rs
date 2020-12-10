@@ -1,8 +1,6 @@
-use super::{
-  parse::{Located, Pos},
-  Ident,
-};
+use super::Ident;
 use crate::UserError;
+use rix_util::*;
 use std::{collections::HashMap, fmt, fmt::Display, path::PathBuf};
 
 pub type ExprRef = Box<Expr>;
@@ -252,7 +250,7 @@ pub struct Attrs {
 }
 
 impl Attrs {
-  pub fn collect<I: IntoIterator<Item = Located<ParseBinding>>>(
+  pub(crate) fn collect<I: IntoIterator<Item = Located<ParseBinding>>>(
     attrs_pos: Pos,
     bindings: I,
     allow_dyn: bool,

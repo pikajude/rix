@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 rix-eval = { path = "./eval" }
 rix-store = { path = "./store" }
+rix-syntax = { path = "./syntax" }
+rix-util = { path = "./util" }
