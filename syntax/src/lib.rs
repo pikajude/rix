@@ -9,13 +9,14 @@ pub use expr::Expr;
 use lalrpop_util::ParseError;
 use lex::Lexer;
 use rix_util::*;
-use std::{path::Path, sync::atomic::AtomicUsize};
+use std::{
+  path::Path,
+  sync::atomic::{AtomicUsize, Ordering},
+};
 
 pub mod expr;
 pub mod lex;
 pub mod parse;
-
-pub type Ident = string_cache::DefaultAtom;
 
 static INLINE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -28,7 +29,7 @@ fn parse_str(file_id: FileId, base_path: &Path, input: &str) -> Result<Expr> {
 pub fn parse_inline(input: &str) -> Result<Expr> {
   let filename = format!(
     "<inline-{}>",
-    INLINE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Acquire)
+    INLINE_COUNTER.fetch_add(1, Ordering::Acquire)
   );
   let mut files = FILES.lock();
   let id = files.add(filename, input.into());

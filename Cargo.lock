@@ -598,6 +598,11 @@ dependencies = [
 [[package]]
 name = "rix-eval"
 version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "rix-syntax",
+ "rix-util",
+]
 
 [[package]]
 name = "rix-store"
@@ -643,6 +648,7 @@ dependencies = [
  "codespan-reporting",
  "lazy_static",
  "parking_lot",
+ "string_cache",
  "thiserror",
 ]
 

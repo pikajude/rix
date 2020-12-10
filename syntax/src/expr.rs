@@ -1,4 +1,3 @@
-use super::Ident;
 use crate::UserError;
 use rix_util::*;
 use std::{collections::HashMap, fmt, fmt::Display, path::PathBuf};

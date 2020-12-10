@@ -1,19 +1,23 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate thiserror;
 
+pub use anyhow::{Context as _, Result};
 pub use codespan::{FileId, Files, Span};
 pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+pub use cons_list::*;
+pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
 use parking_lot::Mutex;
 use std::fmt::{self, Debug, Display, Formatter};
 
+mod cons_list;
 pub mod error;
-
-pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
 
 lazy_static! {
   #[doc(hidden)]
   pub static ref FILES: Mutex<Files<String>> = Default::default();
 }
+
+pub type Ident = string_cache::DefaultAtom;
 
 #[derive(Clone)]
 pub struct Located<T> {

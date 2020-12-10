@@ -1,4 +1,4 @@
-use super::{Ident, UserError};
+use super::UserError;
 use codespan::{FileId, Span};
 use regex::Regex;
 use rix_util::*;
