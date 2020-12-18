@@ -40,7 +40,7 @@ impl FixedOutputHash {
     store.make_fixed_output_path(
       self.method,
       self.hash,
-      output_path_name(drv_name, output_name),
+      &output_path_name(drv_name, output_name),
       &Default::default(),
       false,
     )

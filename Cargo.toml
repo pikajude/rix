@@ -1,11 +1,3 @@
-[package]
-name = "rix"
-version = "0.1.0"
-authors = ["Jude Taylor <me@jude.xyz>"]
-edition = "2018"
+[workspace]
 
-[dependencies]
-rix-eval = { path = "./eval" }
-rix-store = { path = "./store" }
-rix-syntax = { path = "./syntax" }
-rix-util = { path = "./util" }
+members = ["eval", "rix", "store", "syntax", "util"]

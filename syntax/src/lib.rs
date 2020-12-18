@@ -10,6 +10,7 @@ use lalrpop_util::ParseError;
 use lex::Lexer;
 use rix_util::*;
 use std::{
+  fs,
   path::Path,
   sync::atomic::{AtomicUsize, Ordering},
 };
@@ -21,9 +22,34 @@ pub mod parse;
 static INLINE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn parse_str(file_id: FileId, base_path: &Path, input: &str) -> Result<Expr> {
-  parse::ExprParser::new()
+  CURRENT_FILE_ID.store(file_id);
+  let h = Hash::hash(input, HashType::SHA256);
+  let mut part0 = h.encode(Encoding::Base32);
+  let part1 = part0.split_off(3);
+
+  let cache_file = dirs::cache_dir()
+    .ok_or_else(|| anyhow!("no cache directory"))?
+    .join("rix")
+    .join("parse")
+    .join(part0)
+    .join(part1);
+
+  if cache_file.exists() {
+    match bincode::deserialize_from(fs::File::open(&cache_file)?) {
+      Ok(x) => return Ok(x),
+      Err(_) => {
+        let _ = fs::remove_file(&cache_file);
+      }
+    }
+  }
+
+  let expr = parse::ExprParser::new()
     .parse(base_path, file_id, Lexer::new(input, file_id))
-    .map_err(|e| LocatedParseError(file_id, e.map_token(|t| t.to_string())).erased())
+    .map_err(|e| LocatedParseError(file_id, e.map_token(|t| t.to_string())).erased())?;
+
+  fs::create_dir_all(cache_file.parent().unwrap())?;
+  bincode::serialize_into(fs::File::create(&cache_file)?, &expr)?;
+  Ok(expr)
 }
 
 pub fn parse_inline(input: &str) -> Result<Expr> {
@@ -42,7 +68,7 @@ pub fn parse_inline(input: &str) -> Result<Expr> {
 
 pub fn parse_from_file<P: AsRef<Path>>(path: P) -> Result<Expr> {
   let path = path.as_ref();
-  let contents = std::fs::read_to_string(path).unwrap();
+  let contents = fs::read_to_string(path)?;
   let mut files = FILES.lock();
   let id = files.add(path, contents);
   parse_str(id, path.parent().unwrap(), files.source(id))

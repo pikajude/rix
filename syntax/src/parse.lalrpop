@@ -8,6 +8,7 @@ use codespan::{Span, FileId};
 use path_abs::PathAbs;
 use rix_util::*;
 use std::path::Path;
+use std::sync::Arc;
 
 grammar<'input>(
   base_path: &Path,
@@ -84,41 +85,41 @@ expr_function: Expr = {
     pos: <>.pos,
     name: Ident::from("<none>"),
     arg: LambdaArg::Plain(<>.v.0),
-    body: Box::new(<>.v.1)
+    body: Arc::new(<>.v.1)
   }),
   S<(<formals> ":" <expr_function>)> => Expr::Lambda(Lambda {
     pos: <>.pos,
     name: Ident::from("<none>"),
     arg: LambdaArg::Formals { name: None, formals: <>.v.0 },
-    body: Box::new(<>.v.1)
+    body: Arc::new(<>.v.1)
   }),
   S<(<formals> "@" <ID> ":" <expr_function>)> => Expr::Lambda(Lambda {
     pos: <>.pos,
     name: Ident::from("<none>"),
     arg: LambdaArg::Formals { name: Some(<>.v.1), formals: <>.v.0 },
-    body: Box::new(<>.v.2)
+    body: Arc::new(<>.v.2)
   }),
   S<(<ID> "@" <formals> ":" <expr_function>)> => Expr::Lambda(Lambda {
     pos: <>.pos,
     name: Ident::from("<none>"),
     arg: LambdaArg::Formals { name: Some(<>.v.0), formals: <>.v.1 },
-    body: Box::new(<>.v.2)
+    body: Arc::new(<>.v.2)
   }),
   S<("assert" <expr> ";" <expr_function>)> => Expr::Assert {
     pos: <>.pos,
-    cond: Box::new(<>.v.0),
-    body: Box::new(<>.v.1)
+    cond: Arc::new(<>.v.0),
+    body: Arc::new(<>.v.1)
   },
   S<("with" <expr> ";" <expr_function>)> => Expr::With {
     pos: <>.pos,
-    env: Box::new(<>.v.0),
-    body: Box::new(<>.v.1),
+    env: Arc::new(<>.v.0),
+    body: Arc::new(<>.v.1),
   },
   S<("let" <S<binding>*> "in" <expr_function>)> =>? {
     let attrs = Attrs::collect(<>.pos, <>.v.0, false)?;
     Ok(Expr::Let {
       attrs,
-      body: Box::new(<>.v.1)
+      body: Arc::new(<>.v.1)
     })
   },
   expr_if
@@ -127,9 +128,9 @@ expr_function: Expr = {
 expr_if: Expr = {
   S<("if" <expr> "then" <expr> "else" <expr>)> => Expr::If {
     pos: <>.pos,
-    cond: Box::new(<>.v.0),
-    rhs1: Box::new(<>.v.1),
-    rhs2: Box::new(<>.v.2),
+    cond: Arc::new(<>.v.0),
+    rhs1: Arc::new(<>.v.1),
+    rhs2: Arc::new(<>.v.2),
   },
   expr_op
 }
@@ -172,7 +173,10 @@ expr_op_9: Expr = {
 }
 
 expr_op_8: Expr = {
-  "!" <expr_op_8> => Expr::Not(Box::new(<>)),
+  S<("!" <expr_op_8>)> => Expr::Not {
+    pos: <>.pos,
+    e: Arc::new(<>.v),
+  },
   expr_op_7
 }
 
@@ -198,7 +202,7 @@ expr_op_5: Expr = {
 }
 
 expr_op_4: Expr = {
-  <lhs:expr_op_4> "?" <path:attrpath> => Expr::HasAttr { lhs: Box::new(lhs), path },
+  <lhs:expr_op_4> "?" <path:attrpath> => Expr::HasAttr { lhs: Arc::new(lhs), path },
   expr_op_3
 }
 
@@ -231,15 +235,15 @@ expr_app: Expr = {
 expr_select: Expr = {
   S<(<expr_simple> "." <attrpath>)> => Expr::Select {
     pos: <>.pos,
-    lhs: Box::new(<>.v.0),
+    lhs: Arc::new(<>.v.0),
     path: <>.v.1,
     def: None,
   },
   S<(<expr_simple> "." <attrpath> "or" <expr_select>)> => Expr::Select {
     pos: <>.pos,
-    lhs: Box::new(<>.v.0),
+    lhs: Arc::new(<>.v.0),
     path: <>.v.1,
-    def: Some(Box::new(<>.v.2)),
+    def: Some(Arc::new(<>.v.2)),
   },
   S<(expr_simple S<"or">)> => Expr::apply(Located {
     pos: <>.pos,
@@ -293,7 +297,7 @@ expr_simple: Expr = {
     attrs.recursive = true;
     Ok(Expr::Select {
       pos: <>.pos,
-      lhs: Box::new(Expr::Attrs(attrs)),
+      lhs: Arc::new(Expr::Attrs(attrs)),
       def: None,
       path: vec![Located { pos: <>.pos, v: AttrName::Static(Ident::from("body")) }]
     })
@@ -305,7 +309,7 @@ expr_simple: Expr = {
   },
   S<("{" <S<binding>*> "}")> =>? Ok(Expr::Attrs(Attrs::collect(<>.pos, <>.v, true)?)),
 
-  "[" <expr_select*> "]" => Expr::List(<>.into_iter().map(Box::new).collect())
+  "[" <expr_select*> "]" => Expr::List(<>.into_iter().map(Arc::new).collect())
 }
 
 ind_string_parts: Expr = {
@@ -351,8 +355,8 @@ attrpath: AttrPath = {
 attr: Located<AttrName> = {
   S<ID> => <>.map(|v|AttrName::Static(v)),
   S<"or"> => <>.map(|_|AttrName::Static(Ident::from("or"))),
-  S<(quote <string_parts> quote)> => <>.map(|v|AttrName::Dynamic(Box::new(v))),
-  S<("${" <expr> "}")> => <>.map(|v|AttrName::Dynamic(Box::new(v)))
+  S<(quote <string_parts> quote)> => <>.map(|v|AttrName::Dynamic(Arc::new(v))),
+  S<("${" <expr> "}")> => <>.map(|v|AttrName::Dynamic(Arc::new(v)))
 }
 
 formals: Formals = {
@@ -372,7 +376,7 @@ formals: Formals = {
 
 formal: Formal = {
   S<ID> => Formal { pos: <>.pos, name: <>.v, def: None },
-  S<(<ID> "?" <expr>)> => Formal { pos: <>.pos, name: <>.v.0, def: Some(Box::new(<>.v.1)) }
+  S<(<ID> "?" <expr>)> => Formal { pos: <>.pos, name: <>.v.0, def: Some(Arc::new(<>.v.1)) }
 }
 
 binding: ParseBinding = {

@@ -1,12 +1,13 @@
 use crate::UserError;
 use rix_util::*;
-use std::{collections::HashMap, fmt, fmt::Display, path::PathBuf};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fmt, fmt::Display, path::PathBuf, sync::Arc};
 
-pub type ExprRef = Box<Expr>;
+pub type ExprRef = Arc<Expr>;
 
 type ParseOk = Result<(), Located<UserError>>;
 
-#[derive(Debug, EnumAsInner, Clone)]
+#[derive(Debug, EnumAsInner, Clone, Serialize, Deserialize)]
 pub enum Expr {
   Pos {
     pos: Pos,
@@ -76,7 +77,10 @@ pub enum Expr {
     lhs: ExprRef,
     path: AttrPath,
   },
-  Not(ExprRef),
+  Not {
+    pos: Pos,
+    e: ExprRef,
+  },
 }
 
 pub fn swap<A, B>(x: Located<(A, B)>) -> Located<(B, A)> {
@@ -91,8 +95,8 @@ impl Expr {
     Self::Op {
       bin: operator,
       pos: args.pos,
-      lhs: Box::new(args.v.0),
-      rhs: Box::new(args.v.1),
+      lhs: Arc::new(args.v.0),
+      rhs: Arc::new(args.v.1),
     }
   }
 
@@ -133,7 +137,10 @@ impl Expr {
       ),
     });
     if invert {
-      Self::Not(Box::new(inner))
+      Self::Not {
+        pos: args.pos,
+        e: Arc::new(inner),
+      }
     } else {
       inner
     }
@@ -142,8 +149,8 @@ impl Expr {
   pub fn apply(args: Located<(Self, Self)>) -> Self {
     Self::Apply {
       pos: args.pos,
-      lhs: Box::new(args.v.0),
-      rhs: Box::new(args.v.1),
+      lhs: Arc::new(args.v.0),
+      rhs: Arc::new(args.v.1),
     }
   }
 
@@ -171,7 +178,7 @@ fn show_attrpath(f: &mut fmt::Formatter, path: &[Located<AttrName>]) -> fmt::Res
   Ok(())
 }
 
-#[derive(Debug, Display, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Display, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Bin {
   #[display(fmt = "==")]
   Eq,
@@ -192,7 +199,7 @@ pub enum Bin {
 pub type AttrPath = Vec<Located<AttrName>>;
 pub type AttrList = Vec<Located<AttrName>>;
 
-#[derive(Debug, EnumAsInner, Clone)]
+#[derive(Debug, EnumAsInner, Clone, Serialize, Deserialize)]
 pub enum AttrName {
   Static(Ident),
   Dynamic(ExprRef),
@@ -204,7 +211,7 @@ pub struct Var {
   pub name: Ident,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LambdaArg {
   Plain(Ident),
   Formals {
@@ -213,13 +220,13 @@ pub enum LambdaArg {
   },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Formals {
   pub formals: Vec<Formal>,
   pub ellipsis: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Formal {
   pub pos: Pos,
   pub name: Ident,
@@ -233,7 +240,7 @@ pub enum ParseBinding {
   InheritFrom(Expr, AttrList),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Lambda {
   pub pos: Pos,
   pub name: Ident,
@@ -241,7 +248,7 @@ pub struct Lambda {
   pub body: ExprRef,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Attrs {
   pub recursive: bool,
   pub attrs: HashMap<Ident, AttrDef>,
@@ -273,8 +280,8 @@ impl Attrs {
                   name.clone(),
                   AttrDef {
                     pos,
-                    inherited: false,
-                    rhs: Box::new(Expr::Var { pos, name }),
+                    inherited: true,
+                    rhs: Arc::new(Expr::Var { pos, name }),
                   },
                 );
               }
@@ -287,7 +294,7 @@ impl Attrs {
           }
         }
         ParseBinding::InheritFrom(from, items) => {
-          let f = Box::new(from);
+          let f = Arc::new(from);
           for Located { pos, v: item } in items {
             if let AttrName::Static(name) = item {
               if this.attrs.contains_key(&name) {
@@ -300,8 +307,8 @@ impl Attrs {
                   name.clone(),
                   AttrDef {
                     pos,
-                    inherited: false,
-                    rhs: Box::new(Expr::Select {
+                    inherited: true,
+                    rhs: Arc::new(Expr::Select {
                       pos,
                       lhs: f.clone(),
                       def: None,
@@ -341,7 +348,9 @@ impl Attrs {
         ..
       }] => {
         if let Some(x) = self.attrs.get_mut(i) {
-          if let (Expr::Attrs(ae), Some(j)) = (rhs, x.rhs.as_attrs_mut()) {
+          if let (Expr::Attrs(ae), Some(j)) =
+            (rhs, Arc::get_mut(&mut x.rhs).unwrap().as_attrs_mut())
+          {
             for (ad, av) in ae.attrs {
               if j.attrs.insert(ad, av).is_some() {
                 panic!("duplicate attribute");
@@ -356,7 +365,7 @@ impl Attrs {
             AttrDef {
               pos,
               inherited: false,
-              rhs: Box::new(rhs),
+              rhs: Arc::new(rhs),
             },
           );
         }
@@ -367,7 +376,7 @@ impl Attrs {
       }] => self.dyn_attrs.push(DynAttrDef {
         pos,
         name: e.clone(),
-        value: Box::new(rhs),
+        value: Arc::new(rhs),
       }),
       [Located {
         v: AttrName::Static(i),
@@ -375,8 +384,8 @@ impl Attrs {
       }, rest @ ..] => {
         if let Some(j) = self.attrs.get_mut(i) {
           if !j.inherited {
-            return j
-              .rhs
+            return Arc::get_mut(&mut j.rhs)
+              .unwrap()
               .as_attrs_mut()
               .expect("duplicate attribute")
               .add_attr(pos, rest, rhs);
@@ -391,7 +400,7 @@ impl Attrs {
             AttrDef {
               pos,
               inherited: false,
-              rhs: Box::new(Expr::Attrs(new_attrs)),
+              rhs: Arc::new(Expr::Attrs(new_attrs)),
             },
           );
         }
@@ -405,7 +414,7 @@ impl Attrs {
         self.dyn_attrs.push(DynAttrDef {
           pos,
           name: e.clone(),
-          value: Box::new(Expr::Attrs(new_attrs)),
+          value: Arc::new(Expr::Attrs(new_attrs)),
         });
       }
     }
@@ -413,14 +422,14 @@ impl Attrs {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttrDef {
   pub pos: Pos,
   pub inherited: bool,
   pub rhs: ExprRef,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DynAttrDef {
   pub pos: Pos,
   pub name: ExprRef,
@@ -496,7 +505,7 @@ impl Display for Expr {
         show_attrpath(f, path)?;
         f.write_str(")")
       }
-      Expr::Not(e) => write!(f, "(!{})", e),
+      Expr::Not { e, .. } => write!(f, "(!{})", e),
     }
   }
 }

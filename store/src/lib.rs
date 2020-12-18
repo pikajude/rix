@@ -1,36 +1,33 @@
 #![feature(pattern)]
 
-#[macro_use] extern crate anyhow;
 #[macro_use] extern crate derive_more;
 #[macro_use] extern crate enum_as_inner;
 #[macro_use] extern crate lazy_static;
 
 use anyhow::Result;
 use derivation::{DerivationType, HashModulo};
-use hash::Encoding;
 use prelude::StorePath;
+use rix_util::*;
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   path::{Path, PathBuf},
 };
 
-pub mod base32;
 pub mod derivation;
-pub mod hash;
 pub mod path;
 mod prelude;
 
 pub use derivation::Derivation;
-pub use hash::{Hash, HashType};
+pub use noop::NoopStore;
 pub use prelude::{FileIngestionMethod, Repair};
 
+pub type PathSet = BTreeSet<String>;
 pub type StorePathSet = BTreeSet<StorePath>;
 
 pub trait Store: Send + Sync {
   fn store_path(&self) -> &Path;
 
-  fn parse_store_path<P: AsRef<Path>>(&self, path: P) -> Result<StorePath> {
-    let path = path.as_ref();
+  fn parse_store_path(&self, path: &Path) -> Result<StorePath> {
     if path.parent() != Some(self.store_path()) {
       bail!(
         "path `{}' is not a direct descendant of the Nix store",
@@ -54,8 +51,8 @@ pub trait Store: Send + Sync {
     self.store_path().join(path.to_string())
   }
 
-  fn is_in_store<P: AsRef<Path>>(&self, path: P) -> bool {
-    path.as_ref().starts_with(self.store_path())
+  fn is_in_store(&self, path: &Path) -> bool {
+    path.starts_with(self.store_path())
   }
 
   fn compute_fs_closure(&self, path: &StorePath, closure: &mut StorePathSet) -> Result<()>;
@@ -68,16 +65,10 @@ pub trait Store: Send + Sync {
   /// database yet.
   fn read_invalid_derivation(&self, path: &StorePath) -> Result<Derivation>;
 
-  fn make_store_path<T: AsRef<str>, N: AsRef<str>>(
-    &self,
-    path_type: T,
-    hash: Hash,
-    name: N,
-  ) -> Result<StorePath> {
-    let name = name.as_ref();
+  fn make_store_path(&self, path_type: &str, hash: Hash, name: &str) -> Result<StorePath> {
     let ident = format!(
       "{}:{}:{}:{}",
-      path_type.as_ref(),
+      path_type,
       hash.encode_with_type(Encoding::Base16),
       self.store_path().display(),
       name
@@ -86,48 +77,33 @@ pub trait Store: Send + Sync {
     StorePath::from_parts(hash.as_bytes(), name)
   }
 
-  fn make_output_path<I: AsRef<str>, N: AsRef<str>>(
-    &self,
-    id: I,
-    hash: Hash,
-    name: N,
-  ) -> Result<StorePath> {
-    let id = id.as_ref();
+  fn make_output_path(&self, id: &str, hash: Hash, name: &str) -> Result<StorePath> {
     if id == "out" {
-      self.make_store_path(format!("output:{}", id), hash, name)
+      self.make_store_path(&format!("output:{}", id), hash, name)
     } else {
-      self.make_store_path(
-        format!("output:{}", id),
-        hash,
-        format!("{}-{}", name.as_ref(), id),
-      )
+      self.make_store_path(&format!("output:{}", id), hash, &format!("{}-{}", name, id))
     }
   }
 
-  fn make_text_path<N: AsRef<str>>(
-    &self,
-    name: N,
-    hash: Hash,
-    refs: &StorePathSet,
-  ) -> Result<StorePath> {
+  fn make_text_path(&self, name: &str, hash: Hash, refs: &StorePathSet) -> Result<StorePath> {
     ensure!(
       hash.ty() == HashType::SHA256,
       "make_text_path can only be used with SHA256"
     );
-    self.make_store_path(make_type(self, "text".into(), refs, false), hash, name)
+    self.make_store_path(&make_type(self, "text".into(), refs, false), hash, name)
   }
 
-  fn make_fixed_output_path<S: AsRef<str>>(
+  fn make_fixed_output_path(
     &self,
     method: FileIngestionMethod,
     hash: Hash,
-    name: S,
+    name: &str,
     refs: &StorePathSet,
     self_referential: bool,
   ) -> Result<StorePath> {
     if hash.ty() == HashType::SHA256 && method == FileIngestionMethod::Recursive {
       self.make_store_path(
-        make_type(self, "source".into(), refs, self_referential),
+        &make_type(self, "source".into(), refs, self_referential),
         hash,
         name,
       )
@@ -164,9 +140,9 @@ pub trait Store: Send + Sync {
     let contents = derivation.print(self, false, None).to_string();
 
     if read_only {
-      self.store_path_for_text(suffix, contents, &refs)
+      self.store_path_for_text(&suffix, contents.as_ref(), &refs)
     } else {
-      self.add_text_to_store(suffix, contents, &refs, repair)
+      self.add_text_to_store(&suffix, contents.as_ref(), &refs, repair)
     }
   }
 
@@ -245,22 +221,24 @@ pub trait Store: Send + Sync {
     Ok(hash)
   }
 
-  fn add_text_to_store<N: AsRef<str>, C: AsRef<str>>(
+  fn add_text_to_store(
     &self,
-    name: N,
-    contents: C,
+    name: &str,
+    contents: &[u8],
     refs: &StorePathSet,
     repair: Repair,
   ) -> Result<StorePath>;
 
-  fn store_path_for_text<N: AsRef<str>, C: AsRef<[u8]>>(
+  fn store_path_for_text(
     &self,
-    name: N,
-    contents: C,
+    name: &str,
+    contents: &[u8],
     refs: &StorePathSet,
   ) -> Result<StorePath> {
     self.make_text_path(name, Hash::hash(contents, HashType::SHA256), refs)
   }
+
+  fn realise_context(&self, context: &PathSet) -> Result<()>;
 }
 
 fn make_type<S: Store + ?Sized>(
@@ -277,4 +255,55 @@ fn make_type<S: Store + ?Sized>(
     ty.push_str(":self");
   }
   ty
+}
+
+mod noop {
+  use super::*;
+  use slog_scope::*;
+
+  pub struct NoopStore;
+
+  impl Store for NoopStore {
+    fn store_path(&self) -> &Path {
+      Path::new("/noop/store")
+    }
+
+    fn compute_fs_closure(&self, path: &StorePath, _: &mut StorePathSet) -> Result<()> {
+      info!(
+        "NOOP: compute FS closure for path: {}",
+        self.print_store_path(path)
+      );
+      Ok(())
+    }
+
+    fn read_derivation(&self, path: &StorePath) -> Result<Derivation> {
+      warn!(
+        "NOOP: read derivation from path: {}",
+        self.print_store_path(path)
+      );
+      bail!("NoopStore cannot read derivations");
+    }
+
+    fn read_invalid_derivation(&self, path: &StorePath) -> Result<Derivation> {
+      self.read_derivation(path)
+    }
+
+    fn add_text_to_store(
+      &self,
+      name: &str,
+      _: &[u8],
+      _: &StorePathSet,
+      _: Repair,
+    ) -> Result<StorePath> {
+      info!("NOOP: adding text for store path named {}", name);
+      Ok(crate::path::DUMMY.clone())
+    }
+
+    fn realise_context(&self, paths: &PathSet) -> Result<()> {
+      if !paths.is_empty() {
+        info!("NOOP: realizing context for store paths: {:?}", paths);
+      }
+      Ok(())
+    }
+  }
 }

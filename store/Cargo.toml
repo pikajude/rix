@@ -13,7 +13,9 @@ enum-as-inner = "0.3.3"
 lazy_static = "1.4.0"
 parking_lot = "0.11.1"
 rust-crypto = "0.2.36"
+slog-scope = "4.3.0"
 thiserror = "1.0.22"
+rix-util = { path = "../util" }
 
 [dev-dependencies]
 assert_matches = "1.4.0"

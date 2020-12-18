@@ -38,9 +38,10 @@ impl Derivation {
       parser.expect('(')?;
       let drv_path = parser.string()?;
       parser.expect(",[")?;
-      drv
-        .input_derivations
-        .insert(store.parse_store_path(&drv_path)?, parser.strings()?);
+      drv.input_derivations.insert(
+        store.parse_store_path(Path::new(&drv_path))?,
+        parser.strings()?,
+      );
       parser.expect(')')?;
     }
 
@@ -48,7 +49,7 @@ impl Derivation {
     let sources = parser
       .paths()?
       .into_iter()
-      .map(|x| store.parse_store_path(x))
+      .map(|x| store.parse_store_path(Path::new(&x)))
       .collect::<anyhow::Result<BTreeSet<_>>>()?;
     drv.input_sources = sources;
 
@@ -116,7 +117,9 @@ fn parse_output<S: Store + ?Sized>(
       "path `{}' is invalid",
       path
     );
-    Ok(Output::InputAddressed(store.parse_store_path(&path)?))
+    Ok(Output::InputAddressed(
+      store.parse_store_path(Path::new(&path))?,
+    ))
   }
 }
 

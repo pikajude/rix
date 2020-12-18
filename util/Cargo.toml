@@ -8,9 +8,25 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.35"
-codespan = "0.11.0"
-codespan-reporting = "0.11.0"
+base64 = "0.13.0"
+binascii = "0.1.4"
+codespan = "0.9.0"
+codespan-reporting = "0.9.0"
+crossbeam = "0.8.0"
+derive_more = "0.99.11"
 lazy_static = "1.4.0"
 parking_lot = "0.11.1"
+rust-crypto = "0.2.36"
+serde = "1.0.118"
+slog = { version = "2.7.0", features = ["max_level_trace"] }
+slog-envlogger = "2.2.0"
+slog-scope = "4.3.0"
+slog-stdlog = "4.1.0"
+slog-term = "2.6.0"
 string_cache = "0.8.1"
 thiserror = "1.0.22"
+
+[dev-dependencies]
+assert_matches = "1.4.0"
+hex = "0.4.2"
+proptest = "0.10.1"

@@ -9,6 +9,11 @@ struct Node<T> {
   next: Option<Arc<Node<T>>>,
 }
 
+/// A Lisp-style cons list using [`Arc`] pointers.
+///
+/// This type doesn't have a [`FromIterator`](std::iter::FromIterator)
+/// implementation since it would necessitate building the list in reverse. Use
+/// the `collect` and/or `collect_reverse` associated functions instead.
 pub struct ConsList<T> {
   front: Option<Arc<Node<T>>>,
   length: usize,
@@ -42,6 +47,18 @@ impl<T> ConsList<T> {
       head: self.front.as_deref(),
       len: self.length,
     }
+  }
+
+  pub fn collect<D: DoubleEndedIterator<Item = T>>(collection: D) -> Self {
+    Self::collect_reverse(collection.rev())
+  }
+
+  pub fn collect_reverse<I: Iterator<Item = T>>(iter: I) -> Self {
+    let mut this = Self::new();
+    for item in iter {
+      this = this.cons(item);
+    }
+    this
   }
 
   #[inline]
@@ -87,9 +104,6 @@ impl<'a, T> IntoIterator for &'a ConsList<T> {
 
 impl<T> Drop for ConsList<T> {
   fn drop(&mut self) {
-    // don't want to blow the stack with destructors,
-    // but also don't want to walk the whole list.
-    // So walk the list until we find a non-uniquely owned item
     let mut head = self.front.take();
     loop {
       let temp = head;

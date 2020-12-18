@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::*;
 use crypto::digest::Digest;
 use std::{
   fmt::{self, Debug},

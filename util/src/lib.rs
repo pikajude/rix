@@ -1,16 +1,35 @@
+#![feature(pattern)]
+#![feature(termination_trait_lib)]
+#![feature(try_trait)]
+
+#[macro_use] extern crate derive_more;
 #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate serde;
 #[macro_use] extern crate thiserror;
 
-pub use anyhow::{Context as _, Result};
-pub use codespan::{FileId, Files, Span};
-pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+#[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
+#[doc(no_inline)] pub use codespan::{FileId, Files, Span};
+#[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 pub use cons_list::*;
 pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
+pub use hash::{Encoding, Hash, HashType};
 use parking_lot::Mutex;
-use std::fmt::{self, Debug, Display, Formatter};
+pub use pos::*;
+use std::{
+  fmt::{self, Debug, Display, Formatter},
+  ops::Try,
+  path::Path,
+  process::Termination,
+  str::pattern::{Pattern, Searcher},
+};
 
+pub mod base32;
 mod cons_list;
 pub mod error;
+pub mod hash;
+pub mod logger;
+mod pos;
 
 lazy_static! {
   #[doc(hidden)]
@@ -19,63 +38,61 @@ lazy_static! {
 
 pub type Ident = string_cache::DefaultAtom;
 
-#[derive(Clone)]
-pub struct Located<T> {
-  pub pos: Pos,
-  pub v: T,
+pub fn show_diagnostic(diag: &Diagnostic<FileId>) -> Result<()> {
+  codespan_reporting::term::emit(
+    &mut StandardStream::stderr(ColorChoice::Auto),
+    &Default::default(),
+    &*FILES.lock(),
+    diag,
+  )?;
+  Ok(())
 }
 
-impl<T> Located<T> {
-  pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Located<U> {
-    Located {
-      pos: self.pos,
-      v: f(self.v),
+pub fn break_str<'a, P: Pattern<'a>>(s: &'a str, pattern: P) -> Option<(&'a str, &'a str)> {
+  let mut search = pattern.into_searcher(s);
+  let (start, end) = search.next_match()?;
+
+  Some((&s[..start], &s[end..]))
+}
+
+/// A newtype wrapper around [`anyhow::Result`]. The [`Termination`] impl acts
+/// the same, except that if the error is [`SomeLocatedError`], it will
+/// additionally use codespan_reporting to pretty-print the error message and
+/// context to stderr.
+pub struct NixResult<T = ()>(pub Result<T>);
+
+pub const fn ok() -> NixResult<()> {
+  NixResult(Ok(()))
+}
+
+impl Termination for NixResult<()> {
+  fn report(self) -> i32 {
+    match self.0 {
+      Ok(()) => self.0.report(),
+      Err(x) => match x.downcast::<SomeLocatedError>() {
+        Ok(located) => {
+          let _ = show_diagnostic(&located.0.diagnose());
+          1
+        }
+        Err(e) => <Result<()>>::Err(e).report(),
+      },
     }
   }
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Hash)]
-pub struct Pos(pub FileId, pub Span);
+impl<T> Try for NixResult<T> {
+  type Error = anyhow::Error;
+  type Ok = T;
 
-impl Debug for Pos {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    write!(f, "Pos({})", self)
+  fn into_result(self) -> Result<Self::Ok, Self::Error> {
+    self.0
   }
-}
 
-impl Display for Pos {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    let files = FILES.lock();
-    let filename = files.name(self.0);
-    let loc1 = files.location(self.0, self.1.start()).unwrap();
-    let loc2 = files.location(self.0, self.1.end()).unwrap();
-    write!(
-      f,
-      "{}:{}:{}-{}:{}",
-      filename.to_string_lossy(),
-      loc1.line.number(),
-      loc1.column.number(),
-      loc2.line.number(),
-      loc2.column.number()
-    )
+  fn from_error(v: Self::Error) -> Self {
+    Self(Err(v))
   }
-}
 
-impl Pos {
-  pub fn none() -> Self {
-    Self(unsafe { std::mem::transmute(1) }, Span::initial())
-  }
-}
-
-pub fn not_located<T>(value: T) -> Located<T> {
-  Located {
-    pos: Pos::none(),
-    v: value,
-  }
-}
-
-impl<T: Debug> Debug for Located<T> {
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    self.v.fmt(f)
+  fn from_ok(v: Self::Ok) -> Self {
+    Self(Ok(v))
   }
 }

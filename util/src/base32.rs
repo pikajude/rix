@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::*;
 
 static B32_CHARS: [u8; 32] = *b"0123456789abcdfghijklmnpqrsvwxyz";
 

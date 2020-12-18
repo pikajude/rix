@@ -1,19 +1,10 @@
 pub use crate::{
-  base32,
   derivation::{Derivation, DerivationType, HashModulo, Output},
-  hash::{self, Encoding, Hash},
   path::{Hash as StorePathHash, Path as StorePath},
   Store,
 };
 pub use anyhow::{Context as _, Result};
-use std::str::pattern::{Pattern, Searcher};
-
-pub fn break_str<'a, P: Pattern<'a>>(s: &'a str, pattern: P) -> Option<(&'a str, &'a str)> {
-  let mut search = pattern.into_searcher(s);
-  let (start, end) = search.next_match()?;
-
-  Some((&s[..start], &s[end..]))
-}
+pub use rix_util::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum FileIngestionMethod {
