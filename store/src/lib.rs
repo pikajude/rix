@@ -6,7 +6,7 @@
 
 use anyhow::Result;
 use derivation::{DerivationType, HashModulo};
-use prelude::StorePath;
+pub use prelude::StorePath;
 use rix_util::*;
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
@@ -221,6 +221,16 @@ pub trait Store: Send + Sync {
     Ok(hash)
   }
 
+  fn add_to_store(
+    &self,
+    name: &str,
+    path: &Path,
+    method: FileIngestionMethod,
+    hash_type: HashType,
+    path_filter: (),
+    repair: Repair,
+  ) -> Result<StorePath>;
+
   fn add_text_to_store(
     &self,
     name: &str,
@@ -269,7 +279,7 @@ mod noop {
     }
 
     fn compute_fs_closure(&self, path: &StorePath, _: &mut StorePathSet) -> Result<()> {
-      info!(
+      warn!(
         "NOOP: compute FS closure for path: {}",
         self.print_store_path(path)
       );
@@ -277,7 +287,7 @@ mod noop {
     }
 
     fn read_derivation(&self, path: &StorePath) -> Result<Derivation> {
-      warn!(
+      error!(
         "NOOP: read derivation from path: {}",
         self.print_store_path(path)
       );
@@ -295,13 +305,26 @@ mod noop {
       _: &StorePathSet,
       _: Repair,
     ) -> Result<StorePath> {
-      info!("NOOP: adding text for store path named {}", name);
+      warn!("NOOP: adding text for store path named {}", name);
+      Ok(crate::path::DUMMY.clone())
+    }
+
+    fn add_to_store(
+      &self,
+      _: &str,
+      path: &Path,
+      _: FileIngestionMethod,
+      _: HashType,
+      _: (),
+      _: Repair,
+    ) -> Result<StorePath> {
+      warn!("NOOP: adding path {} to store", path.display());
       Ok(crate::path::DUMMY.clone())
     }
 
     fn realise_context(&self, paths: &PathSet) -> Result<()> {
       if !paths.is_empty() {
-        info!("NOOP: realizing context for store paths: {:?}", paths);
+        warn!("NOOP: realizing context for store paths: {:?}", paths);
       }
       Ok(())
     }

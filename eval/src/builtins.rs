@@ -118,6 +118,7 @@ impl Init {
     self.add_primop("__lessThan", 2, prim_less_than);
 
     self.add_constant("__currentSystem", Value::string("x86_64-linux"));
+    self.add_constant("__nixPath", mk_nix_path());
     self.add_constant("__nixVersion", Value::string("2.3.9"));
 
     // TODO: this should just be an `eval_file` but getting the thunk ordering right
@@ -139,9 +140,15 @@ impl Init {
         )))),
       ),
     );
+    self.add_primop(
+      "derivationStrict",
+      1,
+      super::derivation::prim_derivation_strict,
+    );
 
-    self.add_primop("__compareVersions", 2, prim_compare_versions);
     self.add_primop("__addErrorContext", 2, prim_add_error_context);
+    self.add_primop("__compareVersions", 2, prim_compare_versions);
+    self.add_primop("baseNameOf", 1, prim_base_name_of);
     self.add_primop("__findFile", 2, prim_find_file);
     self.add_primop("__fromJSON", 1, prim_from_json);
     self.add_primop("__functionArgs", 1, prim_function_args);
@@ -154,12 +161,14 @@ impl Init {
     self.add_primop("__seq", 2, prim_seq);
     self.add_primop("__toJSON", 1, prim_to_json);
     self.add_primop("__tryEval", 1, prim_try_eval);
-    self.add_constant("__nixPath", mk_nix_path());
 
     self.add_primop("__attrNames", 1, prim_attrnames);
+    self.add_primop("__getAttr", 2, prim_get_attr);
     self.add_primop("__hasAttr", 2, prim_has_attr);
+    self.add_primop("__intersectAttrs", 2, prim_intersect_attrs);
     self.add_primop("__listToAttrs", 1, prim_list_to_attrs);
     self.add_primop("removeAttrs", 2, prim_remove_attrs);
+    self.add_primop("__unsafeGetAttrPos", 2, prim_get_attr_pos);
 
     self.add_primop("__concatLists", 1, prim_concat_lists);
     self.add_primop("__elem", 2, prim_elem);
@@ -167,7 +176,6 @@ impl Init {
     self.add_primop("__filter", 2, prim_filter);
     self.add_primop("__genList", 2, prim_gen_list);
     self.add_primop("__head", 1, prim_head);
-    self.add_primop("__intersectAttrs", 2, prim_intersect_attrs);
     self.add_primop("__length", 1, |eval, pos, args| {
       Ok(Value::Int(eval.force_list(pos, &args[0])?.len() as i64))
     });
@@ -176,6 +184,7 @@ impl Init {
 
     self.add_primop("__concatStringsSep", 2, prim_concat_strings_sep);
     self.add_primop("__match", 2, prim_match);
+    self.add_primop("__split", 2, prim_split);
     self.add_primop("__stringLength", 1, |eval, pos, args| {
       Ok(Value::Int(
         eval
@@ -186,6 +195,10 @@ impl Init {
     });
     self.add_primop("__substring", 3, prim_substring);
     self.add_primop("toString", 1, prim_to_string);
+    self.add_primop("__unsafeDiscardStringContext", 1, |eval, pos, args| {
+      let s = eval.coerce_new_string(pos, &args[0], CoerceOpts::default())?;
+      Ok(Value::string(s.s))
+    });
 
     self.add_primop("__isAttrs", 1, checktype!(Value::Attrs {..}));
     self.add_primop("__isBool", 1, checktype!(Value::Bool {..}));
@@ -300,6 +313,15 @@ fn prim_remove_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::Attrs(Arc::new(attrs)))
 }
 
+fn prim_get_attr_pos(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrname = eval.force_string_no_context(pos, &args[0])?;
+  let attrs = eval.force_attrs(pos, &args[1])?;
+  match attrs.get(&Ident::from(&*attrname)) {
+    Some(l) => pos_to_value(l.pos),
+    None => Ok(Value::Null),
+  }
+}
+
 fn prim_gen_list(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let n = eval.force_int(pos, &args[1])?;
   if n < 0 {
@@ -328,6 +350,15 @@ fn prim_tail(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
     throw!(pos, "builtins.tail: empty list");
   }
   Ok(Value::List(Arc::new(list[1..].to_vec())))
+}
+
+fn prim_get_attr(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrname = eval.force_string_no_context(pos, &args[0])?;
+  let attrs0 = eval.force_attrs(pos, &args[1])?;
+  match attrs0.get(&Ident::from(&*attrname)) {
+    Some(v) => eval.clone_value(pos, &v.v),
+    None => throw!(pos, "attribute `{}' missing", attrname),
+  }
 }
 
 fn prim_has_attr(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
@@ -397,6 +428,21 @@ fn prim_intersect_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
 fn prim_getenv(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let varname = eval.force_string_no_context(pos, &args[0])?;
   Ok(Value::string(std::env::var(&*varname).unwrap_or_default()))
+}
+
+fn prim_base_name_of(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let mut path = eval.coerce_new_string(
+    pos,
+    &args[0],
+    CoerceOpts {
+      copy_to_store: false,
+      coerce_more: false,
+    },
+  )?;
+  path.s = Path::new(&path.s)
+    .file_name()
+    .map_or_else(String::new, |x| x.to_string_lossy().to_string());
+  Ok(Value::String(path))
 }
 
 fn prim_path_exists(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
@@ -589,7 +635,9 @@ impl REGEX_CACHE {
 }
 
 fn prim_match(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let regex_str = eval.force_string_no_context(pos, &args[0])?.to_string();
+  let mut regex_str = String::from("^");
+  regex_str.push_str(&*eval.force_string_no_context(pos, &args[0])?);
+  regex_str.push('$');
   let reg = REGEX_CACHE.get(&regex_str)?;
   let haystack = eval.force_string(pos, &args[1])?;
 
@@ -603,6 +651,74 @@ fn prim_match(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   } else {
     Ok(Value::Null)
   }
+}
+
+#[test]
+fn test_match() -> NixResult {
+  let eval = Eval::test();
+
+  eval.assert(r#"builtins.match "ab" "abc" == null"#)?;
+  eval.assert(r#"builtins.match "abc" "abc" == []"#)?;
+  eval.assert(r#"builtins.match "a(b)(c)" "abc" == [ "b" "c" ]"#)?;
+  eval.assert(
+    r#"
+    builtins.match "[[:space:]]+([[:upper:]]+)[[:space:]]+" "  FOO   "
+      == [ "FOO" ]
+      "#,
+  )?;
+
+  ok()
+}
+
+fn prim_split(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let regex = eval.force_string_no_context(pos, &args[0])?;
+  let regex = REGEX_CACHE.get(&*regex)?;
+
+  let haystack = eval.force_string(pos, &args[1])?;
+
+  let mut caps_iter = regex.captures_iter(&haystack.s).peekable();
+
+  if caps_iter.peek().is_none() {
+    return Ok(Value::List(Arc::new(vec![args[1].clone()])));
+  }
+
+  let mut parts = vec![];
+  let mut prev_end = 0usize;
+  for cap in caps_iter {
+    let mut cap_iter = cap.iter();
+    let full_match = cap_iter
+      .next()
+      .unwrap()
+      .expect("invariant: capture group 0 doesn't exist");
+    parts.push(vref(Value::string(
+      &haystack.s[prev_end..full_match.start()],
+    )));
+    prev_end = full_match.end();
+    let mut match_elems = vec![];
+    for m in cap_iter {
+      if let Some(m) = m {
+        match_elems.push(vref(Value::string(m.as_str())));
+      } else {
+        match_elems.push(vref(Value::Null));
+      }
+    }
+    parts.push(vref(Value::List(Arc::new(match_elems))));
+  }
+
+  parts.push(vref(Value::string(&haystack.s[prev_end..])));
+  Ok(Value::List(Arc::new(parts)))
+}
+
+#[test]
+fn test_split() -> NixResult {
+  let eval = Eval::test();
+
+  eval.assert(r#"builtins.split "(a)b" "abc" == [ "" [ "a" ] "c" ]"#)?;
+  eval.assert(r#"builtins.split "([ac])" "abc" == [ "" [ "a" ] "b" [ "c" ] "" ]"#)?;
+  eval.assert(r#"builtins.split "(a)|(c)" "abc" == [ "" [ "a" null ] "b" [ null "c" ] "" ]"#)?;
+  eval.assert(r#"builtins.split "([[:upper:]]+)" "  FOO  " == [ "  " [ "FOO" ] "  " ]"#)?;
+
+  ok()
 }
 
 fn prim_substring(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
@@ -773,7 +889,7 @@ fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   bail!(Catchable::Throw(
     pos,
     format!(
-      "entry `{}' is not in the Nix search path (try adding it using -I)",
+      "entry `{}' is not in the Nix search path (try adding it using -I or by setting $NIX_PATH)",
       target
     )
   ))

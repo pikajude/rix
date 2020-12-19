@@ -2,6 +2,7 @@ use crate::{prelude::*, FileIngestionMethod, HashType};
 use parking_lot::Mutex;
 pub use print::Print;
 use std::{
+  borrow::Cow,
   collections::{BTreeMap, BTreeSet, HashMap},
   path::PathBuf,
 };
@@ -53,6 +54,22 @@ pub enum Output {
   Fixed(FixedOutputHash),
   Floating(FileIngestionMethod, HashType),
   Deferred,
+}
+
+impl Output {
+  pub fn path<S: Store + ?Sized>(
+    &self,
+    store: &S,
+    drv_name: &str,
+    output_name: &str,
+  ) -> Result<Option<Cow<StorePath>>> {
+    Ok(match self {
+      Output::InputAddressed(i) => Some(Cow::Borrowed(i)),
+      Output::Fixed(f) => Some(Cow::Owned(f.store_path(store, drv_name, output_name)?)),
+      Output::Floating(_, _) => None,
+      Output::Deferred => None,
+    })
+  }
 }
 
 fn output_path_name(drv_name: impl AsRef<str>, output_name: impl AsRef<str>) -> String {

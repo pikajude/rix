@@ -307,7 +307,7 @@ impl Attrs {
                   name.clone(),
                   AttrDef {
                     pos,
-                    inherited: true,
+                    inherited: false,
                     rhs: Arc::new(Expr::Select {
                       pos,
                       lhs: f.clone(),

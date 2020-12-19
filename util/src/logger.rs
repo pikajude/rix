@@ -1,9 +1,8 @@
+use once_cell::sync::Lazy;
+use slog::{Drain, FnValue, Record};
 use std::sync::Mutex;
 
-use anyhow::Result;
-use slog::{Drain, FnValue, Record};
-
-pub fn init() -> Result<()> {
+static LOGGER_INIT: Lazy<()> = Lazy::new(|| {
   let logger = slog::Logger::root(
     Mutex::new(slog_envlogger::new(slog_term::term_full()).fuse()).fuse(),
     slog::o!("location" => FnValue(move |r: &Record| {
@@ -14,7 +13,9 @@ pub fn init() -> Result<()> {
   let log_guard = slog_scope::set_global_logger(logger);
   std::mem::forget(log_guard);
 
-  slog_stdlog::init()?;
+  slog_stdlog::init().expect("unable to initialize slog-stdlog");
+});
 
-  Ok(())
+pub fn init() {
+  Lazy::force(&LOGGER_INIT);
 }

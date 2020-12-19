@@ -1,23 +1,26 @@
+#![feature(map_first_last)]
+
 #[macro_use] extern crate enum_as_inner;
 #[macro_use] extern crate lazy_static;
-#[macro_use] extern crate thiserror;
+#[macro_use] extern crate slog_scope;
 
 use error::*;
 use parking_lot::*;
-use rix_store::Store;
+use rix_store::{FileIngestionMethod, Repair, Store};
 use rix_syntax::{
   expr::{AttrName, Bin, Lambda, LambdaArg},
   Expr,
 };
 use rix_util::*;
 use std::{
+  collections::HashMap,
   path::{Path, PathBuf},
   sync::Arc,
 };
 use value::*;
 
 mod builtins;
-mod error;
+mod derivation;
 mod value;
 
 fn vref(v: Value) -> ValueRef {
@@ -42,6 +45,7 @@ impl Default for CoerceOpts {
 pub struct Eval {
   base_env: Env,
   store: Arc<dyn Store>,
+  eval_cache: Mutex<HashMap<PathBuf, ValueRef>>,
 }
 
 impl Eval {
@@ -49,12 +53,13 @@ impl Eval {
     Self {
       base_env: Env::new(builtins::Init::new().init()),
       store,
+      eval_cache: Default::default(),
     }
   }
 
   #[cfg(test)]
   pub fn test() -> Self {
-    logger::init().expect("couldn't initialize logger");
+    logger::init();
     Self::new(Arc::new(rix_store::NoopStore))
   }
 
@@ -65,8 +70,23 @@ impl Eval {
     } else {
       path.to_path_buf()
     };
-    let expr = rix_syntax::parse_from_file(&real_path)?;
-    self.eval(&self.base_env, &expr)
+
+    {
+      if let Some(f) = self.eval_cache.lock().get(path) {
+        return self.clone_value(Pos::none(), f);
+      }
+    }
+
+    let expr = Arc::new(rix_syntax::parse_from_file(&real_path)?);
+    debug!("evaluating file {}", real_path.display());
+    let val = vref(self.eval(&self.base_env, &expr)?);
+
+    self
+      .eval_cache
+      .lock()
+      .insert(path.to_path_buf(), val.clone());
+
+    self.clone_value(Pos::none(), &val)
   }
 
   pub fn eval_inline<I: AsRef<str>>(&self, input: I) -> Result<Value> {
@@ -489,7 +509,7 @@ impl Eval {
       Value::Path(p) => {
         let p = p.canonicalize()?;
         if opts.copy_to_store {
-          unreachable!()
+          self.copy_path_to_store(pos, &p, context)?
         } else {
           p.display().to_string()
         }
@@ -753,6 +773,13 @@ impl Eval {
     }
   }
 
+  fn force_bool(&self, pos: Pos, v: &ValueRef) -> Result<bool> {
+    match &*self.force(pos, v)? {
+      Value::Bool(b) => Ok(*b),
+      v => throw!(pos, "expected bool, got {}", v.typename()),
+    }
+  }
+
   fn expect_fn(&self, pos: Pos, v: &ValueRef) -> Result<()> {
     match &*self.force(pos, v)? {
       Value::Lambda { .. } | Value::Primop { .. } => Ok(()),
@@ -796,6 +823,30 @@ impl Eval {
     RwLockReadGuard::try_map(self.force(pos, v)?, |m| m.as_string())
       .map_err(|v| err!(pos, "expected string, got {}", v.typename()))
   }
+
+  fn copy_path_to_store<P: AsRef<Path>>(
+    &self,
+    pos: Pos,
+    path: P,
+    ctx: &mut PathSet,
+  ) -> Result<String> {
+    let path = path.as_ref();
+    if path.ends_with(".drv") {
+      throw!(pos, "filenames may not end in .drv");
+    }
+
+    let p = self.store.add_to_store(
+      path.file_name().and_then(|x| x.to_str()).unwrap_or(""),
+      path,
+      FileIngestionMethod::Recursive,
+      HashType::SHA256,
+      (),
+      Repair::Off,
+    )?;
+    let realpath = self.store.print_store_path(&p);
+    ctx.insert(realpath.clone());
+    Ok(realpath)
+  }
 }
 
 fn numbers<T, F: Fn(i64, i64) -> T, G: Fn(f64, f64) -> T>(
@@ -813,45 +864,91 @@ fn numbers<T, F: Fn(i64, i64) -> T, G: Fn(f64, f64) -> T>(
   }
 }
 
-#[test]
-fn test_eval() -> NixResult {
-  let e = Eval::test();
-  let expr = e.eval_inline("(import <nixpkgs> { overlays = []; }).stdenv.cc")?;
-  eprintln!("{}", expr.typename());
+fn pos_to_value(pos: Pos) -> Result<Value> {
+  let fs = rix_util::FILES.lock();
+  let fname: PathBuf = fs.name(pos.0).into();
+  let loc = fs.location(pos.0, pos.1.start())?;
+  let line = loc.line.to_usize();
+  let col = loc.column.to_usize();
+  drop(fs);
 
-  ok()
+  Ok(Value::Attrs(Arc::new({
+    let mut a = Attrs::new();
+    a.insert(
+      Ident::from("file"),
+      Located {
+        pos,
+        v: vref(Value::string(fname.display().to_string())),
+      },
+    );
+    a.insert(
+      Ident::from("line"),
+      Located {
+        pos,
+        v: vref(Value::Int(line as _)),
+      },
+    );
+    a.insert(
+      Ident::from("column"),
+      Located {
+        pos,
+        v: vref(Value::Int(col as _)),
+      },
+    );
+    a
+  })))
 }
 
-#[test]
-fn test_attrs_equality() -> NixResult {
-  let e = Eval::test();
+#[cfg(test)]
+mod tests {
+  use super::{Eval, Value};
+  use rix_util::*;
 
-  macro_rules! assert_true {
-    ($expr:literal) => {
-      let v = e.eval_inline($expr)?;
-      match v {
-        Value::Bool(b) => assert_eq!(b, true),
-        v => panic!("unexpected value {}", v.typename()),
+  impl Eval {
+    pub(crate) fn assert<I: AsRef<str>>(&self, input: I) -> Result<()> {
+      let input = input.as_ref();
+      let expr = self.eval_inline(input)?;
+      match expr {
+        Value::Bool(b) => assert!(b, "assertion failed: {}", input),
+        v => bail!(
+          "assert_true expects a bool expression, but got {}",
+          v.typename()
+        ),
       }
-    };
-  };
-  macro_rules! assert_false {
-    ($expr:literal) => {
-      let v = e.eval_inline($expr)?;
-      match v {
-        Value::Bool(b) => assert_eq!(b, false),
-        v => panic!("unexpected value {}", v.typename()),
-      }
-    };
-  };
+      Ok(())
+    }
+  }
 
-  assert_true!("let x = { f = _: 1; }; in x == x");
-  assert_false!("let x = { f = _: 1; }; in x == { inherit (x) f; }");
-  assert_true!("let x.f = { y = _: 1; }; in x == { inherit (x) f; }");
+  #[test]
+  fn test_eval() -> NixResult {
+    let e = Eval::test();
+    let expr = e.eval_inline("(import <nixpkgs> { overlays = []; }).stdenv.cc.outPath")?;
+    eprintln!("{}", expr.typename());
 
-  assert_false!("let x = { f = _: 1; }; in x == x // { inherit (x) f; }");
-  assert_true!("let x = { f = _: 1; }; in x == { inherit (x) f; } // x");
-  assert_true!(r#"let x = { f = _: 1; }; in x == builtins.removeAttrs (x // { g = 1; }) ["g"]"#);
+    ok()
+  }
 
-  ok()
+  #[test]
+  fn test_recursive() -> NixResult {
+    let e = Eval::test();
+
+    e.assert("let a = { b = 1; }; inherit (a) b; in b == 1")?;
+
+    ok()
+  }
+
+  #[test]
+  fn test_attrs_equality() -> NixResult {
+    let e = Eval::test();
+
+    e.assert("let x = { f = _: 1; }; in x == x")?;
+    e.assert("let x = { f = _: 1; }; in x != { inherit (x) f; }")?;
+    e.assert("let x.f = { y = _: 1; }; in x == { inherit (x) f; }")?;
+
+    e.assert("let x = { f = _: 1; }; in x != x // { inherit (x) f; }")?;
+    e.assert("let x = { f = _: 1; }; in x == { inherit (x) f; } // x")?;
+    e.assert(r#"let x = { f = _: 1; }; in x == builtins.removeAttrs (x // { g = 1; }) ["g"]"#)?;
+
+    ok()
+  }
 }

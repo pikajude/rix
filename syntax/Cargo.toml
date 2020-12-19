@@ -19,6 +19,7 @@ path_abs = "0.5.0"
 regex = "1.4.2"
 rix-util = { path = "../util" }
 serde = { version = "1.0.118", features = ["rc", "derive"] }
+slog-scope = "4.3.0"
 string_cache = "0.8.1"
 thiserror = "1.0.22"
 

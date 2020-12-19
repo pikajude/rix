@@ -12,6 +12,7 @@
 #[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 pub use cons_list::*;
+use error::Catchable;
 pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
 pub use hash::{Encoding, Hash, HashType};
 use parking_lot::Mutex;
@@ -69,12 +70,18 @@ impl Termination for NixResult<()> {
   fn report(self) -> i32 {
     match self.0 {
       Ok(()) => self.0.report(),
-      Err(x) => match x.downcast::<SomeLocatedError>() {
-        Ok(located) => {
-          let _ = show_diagnostic(&located.0.diagnose());
+      Err(x) => match x.downcast::<Catchable>() {
+        Ok(c) => {
+          let _ = show_diagnostic(&c.diagnose());
           1
         }
-        Err(e) => <Result<()>>::Err(e).report(),
+        Err(x) => match x.downcast::<SomeLocatedError>() {
+          Ok(located) => {
+            let _ = show_diagnostic(&located.0.diagnose());
+            1
+          }
+          Err(e) => <Result<()>>::Err(e).report(),
+        },
       },
     }
   }

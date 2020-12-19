@@ -28,7 +28,7 @@ impl Path {
   pub fn from_base_name<S: AsRef<str>>(base_name: S) -> Result<Self> {
     let base_name = base_name.as_ref();
     ensure!(
-      base_name.len() < HASH_CHARS + 1 || base_name.as_bytes()[HASH_CHARS] != b'-',
+      !(base_name.len() < HASH_CHARS + 1 || base_name.as_bytes()[HASH_CHARS] != b'-'),
       "invalid filename for store path: `{}'",
       base_name
     );

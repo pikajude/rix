@@ -60,6 +60,14 @@ impl Hash {
     Ok(ctx.finish())
   }
 
+  pub fn placeholder<S: AsRef<str>>(name: S) -> String {
+    let name = name.as_ref();
+    format!(
+      "/{}",
+      Self::hash(format!("nix-output:{}", name), HashType::SHA256).encode(Encoding::Base32)
+    )
+  }
+
   pub fn new_allow_empty(s: &str, ty: Option<HashType>) -> Result<Self> {
     if s.is_empty() {
       if let Some(ht) = ty {

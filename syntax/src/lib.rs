@@ -1,6 +1,7 @@
 #[macro_use] extern crate derive_more;
 #[macro_use] extern crate enum_as_inner;
 #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate slog_scope;
 #[macro_use] extern crate thiserror;
 
 use anyhow::Result;
@@ -11,7 +12,7 @@ use lex::Lexer;
 use rix_util::*;
 use std::{
   fs,
-  path::Path,
+  path::{Path, PathBuf},
   sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -21,34 +22,47 @@ pub mod parse;
 
 static INLINE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-fn parse_str(file_id: FileId, base_path: &Path, input: &str) -> Result<Expr> {
+fn parse_str(
+  file_id: FileId,
+  use_cache: bool,
+  path: &Path,
+  base: &Path,
+  input: &str,
+) -> Result<Expr> {
   CURRENT_FILE_ID.store(file_id);
-  let h = Hash::hash(input, HashType::SHA256);
-  let mut part0 = h.encode(Encoding::Base32);
-  let part1 = part0.split_off(3);
+  let h = Hash::hash(input, HashType::MD5);
+  let mut part0 = h.encode(Encoding::Base16);
+  let part1 = part0.split_off(2);
+  let mut cache_file = PathBuf::new();
 
-  let cache_file = dirs::cache_dir()
-    .ok_or_else(|| anyhow!("no cache directory"))?
-    .join("rix")
-    .join("parse")
-    .join(part0)
-    .join(part1);
+  if use_cache {
+    cache_file = dirs::cache_dir()
+      .ok_or_else(|| anyhow!("no cache directory"))?
+      .join("rix")
+      .join("parse")
+      .join(part0)
+      .join(part1);
 
-  if cache_file.exists() {
-    match bincode::deserialize_from(fs::File::open(&cache_file)?) {
-      Ok(x) => return Ok(x),
-      Err(_) => {
-        let _ = fs::remove_file(&cache_file);
+    if cache_file.exists() {
+      match bincode::deserialize_from(fs::File::open(&cache_file)?) {
+        Ok(x) => return Ok(x),
+        Err(_) => {
+          let _ = fs::remove_file(&cache_file);
+        }
       }
     }
+
+    debug!("cache miss, parsing file {}", path.display());
   }
 
   let expr = parse::ExprParser::new()
-    .parse(base_path, file_id, Lexer::new(input, file_id))
+    .parse(base, file_id, Lexer::new(input, file_id))
     .map_err(|e| LocatedParseError(file_id, e.map_token(|t| t.to_string())).erased())?;
 
-  fs::create_dir_all(cache_file.parent().unwrap())?;
-  bincode::serialize_into(fs::File::create(&cache_file)?, &expr)?;
+  if use_cache {
+    fs::create_dir_all(cache_file.parent().unwrap())?;
+    bincode::serialize_into(fs::File::create(&cache_file)?, &expr)?;
+  }
   Ok(expr)
 }
 
@@ -58,9 +72,11 @@ pub fn parse_inline(input: &str) -> Result<Expr> {
     INLINE_COUNTER.fetch_add(1, Ordering::Acquire)
   );
   let mut files = FILES.lock();
-  let id = files.add(filename, input.into());
+  let id = files.add(filename.clone(), input.into());
   parse_str(
     id,
+    false,
+    Path::new(&filename),
     &*std::env::current_dir().expect("no current_dir()"),
     files.source(id),
   )
@@ -71,7 +87,7 @@ pub fn parse_from_file<P: AsRef<Path>>(path: P) -> Result<Expr> {
   let contents = fs::read_to_string(path)?;
   let mut files = FILES.lock();
   let id = files.add(path, contents);
-  parse_str(id, path.parent().unwrap(), files.source(id))
+  parse_str(id, true, path, path.parent().unwrap(), files.source(id))
 }
 
 #[derive(Debug, Error)]
