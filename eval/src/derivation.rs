@@ -103,6 +103,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
           );
         }
       } else if key == "outputs" {
+        outputs.clear();
         for out_name in strval.split_ascii_whitespace() {
           if out_name == "drv" {
             throw!(drv_name_pos, "invalid derivation output name `drv'");

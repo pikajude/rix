@@ -1,4 +1,5 @@
 use crate::{prelude::*, FileIngestionMethod, HashType};
+pub use name::Name as DrvName;
 use parking_lot::Mutex;
 pub use print::Print;
 use std::{
@@ -7,6 +8,7 @@ use std::{
   path::PathBuf,
 };
 
+mod name;
 mod parse;
 mod print;
 

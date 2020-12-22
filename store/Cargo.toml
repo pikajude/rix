@@ -8,14 +8,16 @@ edition = "2018"
 anyhow = "1.0.34"
 base64 = "0.13.0"
 binascii = "0.1.4"
+derivative = "2.1.1"
 derive_more = "0.99.11"
+dirs = "3.0.1"
 enum-as-inner = "0.3.3"
 lazy_static = "1.4.0"
 parking_lot = "0.11.1"
+rix-util = { path = "../util" }
 rust-crypto = "0.2.36"
 slog-scope = "4.3.0"
 thiserror = "1.0.22"
-rix-util = { path = "../util" }
 
 [dev-dependencies]
 assert_matches = "1.4.0"

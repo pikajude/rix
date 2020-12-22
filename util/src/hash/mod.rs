@@ -55,9 +55,10 @@ impl Hash {
   }
 
   pub fn hash_file<P: AsRef<Path>>(path: P, ty: HashType) -> Result<(Self, usize)> {
-    let mut ctx = Sink::new(ty);
+    let mut ctx = Sink::new(ty, std::io::sink());
     std::io::copy(&mut File::open(path)?, &mut ctx)?;
-    Ok(ctx.finish())
+    let (_, hash, len) = ctx.finish();
+    Ok((hash, len))
   }
 
   pub fn placeholder<S: AsRef<str>>(name: S) -> String {

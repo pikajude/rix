@@ -30,6 +30,7 @@ mod cons_list;
 pub mod error;
 pub mod hash;
 pub mod logger;
+pub mod nar;
 mod pos;
 
 lazy_static! {

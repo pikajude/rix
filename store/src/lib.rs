@@ -1,24 +1,29 @@
 #![feature(pattern)]
+#![feature(str_split_once)]
 
+#[macro_use] extern crate derivative;
 #[macro_use] extern crate derive_more;
 #[macro_use] extern crate enum_as_inner;
 #[macro_use] extern crate lazy_static;
 
 use anyhow::Result;
-use derivation::{DerivationType, HashModulo};
 pub use prelude::StorePath;
 use rix_util::*;
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
+  io::Read,
   path::{Path, PathBuf},
 };
 
 pub mod derivation;
+mod noop_store;
 pub mod path;
+pub mod path_info;
 mod prelude;
 
-pub use derivation::Derivation;
-pub use noop::NoopStore;
+pub use derivation::{Derivation, DerivationType, DrvName, HashModulo, Output};
+pub use noop_store::NoopStore;
+pub use path_info::ValidPathInfo;
 pub use prelude::{FileIngestionMethod, Repair};
 
 pub type PathSet = BTreeSet<String>;
@@ -54,6 +59,8 @@ pub trait Store: Send + Sync {
   fn is_in_store(&self, path: &Path) -> bool {
     path.starts_with(self.store_path())
   }
+
+  fn is_valid_path(&self, path: &StorePath) -> bool;
 
   fn compute_fs_closure(&self, path: &StorePath, closure: &mut StorePathSet) -> Result<()>;
 
@@ -207,8 +214,10 @@ pub trait Store: Send + Sync {
   }
 
   fn path_derivation_modulo(&self, drv_path: &StorePath) -> Result<HashModulo> {
-    if let Some(m) = derivation::DRV_HASHES.lock().get(drv_path).cloned() {
-      return Ok(m);
+    {
+      if let Some(m) = derivation::DRV_HASHES.lock().get(drv_path).cloned() {
+        return Ok(m);
+      }
     }
 
     let drv = self.read_invalid_derivation(drv_path)?;
@@ -221,7 +230,7 @@ pub trait Store: Send + Sync {
     Ok(hash)
   }
 
-  fn add_to_store(
+  fn add_path_to_store(
     &self,
     name: &str,
     path: &Path,
@@ -239,6 +248,13 @@ pub trait Store: Send + Sync {
     repair: Repair,
   ) -> Result<StorePath>;
 
+  fn add_to_store(
+    &self,
+    path_info: ValidPathInfo,
+    source: Box<dyn Read>,
+    repair: Repair,
+  ) -> Result<()>;
+
   fn store_path_for_text(
     &self,
     name: &str,
@@ -249,6 +265,8 @@ pub trait Store: Send + Sync {
   }
 
   fn realise_context(&self, context: &PathSet) -> Result<()>;
+
+  fn check_uri(&self, uri: &str) -> Result<()>;
 }
 
 fn make_type<S: Store + ?Sized>(
@@ -265,68 +283,4 @@ fn make_type<S: Store + ?Sized>(
     ty.push_str(":self");
   }
   ty
-}
-
-mod noop {
-  use super::*;
-  use slog_scope::*;
-
-  pub struct NoopStore;
-
-  impl Store for NoopStore {
-    fn store_path(&self) -> &Path {
-      Path::new("/noop/store")
-    }
-
-    fn compute_fs_closure(&self, path: &StorePath, _: &mut StorePathSet) -> Result<()> {
-      warn!(
-        "NOOP: compute FS closure for path: {}",
-        self.print_store_path(path)
-      );
-      Ok(())
-    }
-
-    fn read_derivation(&self, path: &StorePath) -> Result<Derivation> {
-      error!(
-        "NOOP: read derivation from path: {}",
-        self.print_store_path(path)
-      );
-      bail!("NoopStore cannot read derivations");
-    }
-
-    fn read_invalid_derivation(&self, path: &StorePath) -> Result<Derivation> {
-      self.read_derivation(path)
-    }
-
-    fn add_text_to_store(
-      &self,
-      name: &str,
-      _: &[u8],
-      _: &StorePathSet,
-      _: Repair,
-    ) -> Result<StorePath> {
-      warn!("NOOP: adding text for store path named {}", name);
-      Ok(crate::path::DUMMY.clone())
-    }
-
-    fn add_to_store(
-      &self,
-      _: &str,
-      path: &Path,
-      _: FileIngestionMethod,
-      _: HashType,
-      _: (),
-      _: Repair,
-    ) -> Result<StorePath> {
-      warn!("NOOP: adding path {} to store", path.display());
-      Ok(crate::path::DUMMY.clone())
-    }
-
-    fn realise_context(&self, paths: &PathSet) -> Result<()> {
-      if !paths.is_empty() {
-        warn!("NOOP: realizing context for store paths: {:?}", paths);
-      }
-      Ok(())
-    }
-  }
 }

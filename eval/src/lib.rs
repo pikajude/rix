@@ -13,7 +13,7 @@ use rix_syntax::{
 };
 use rix_util::*;
 use std::{
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   path::{Path, PathBuf},
   sync::Arc,
 };
@@ -21,6 +21,7 @@ use value::*;
 
 mod builtins;
 mod derivation;
+mod fetch;
 mod value;
 
 fn vref(v: Value) -> ValueRef {
@@ -51,7 +52,7 @@ pub struct Eval {
 impl Eval {
   pub fn new(store: Arc<dyn Store>) -> Self {
     Self {
-      base_env: Env::new(builtins::Init::new().init()),
+      base_env: Env::new(builtins::Init::new().init(&*store)),
       store,
       eval_cache: Default::default(),
     }
@@ -59,8 +60,8 @@ impl Eval {
 
   #[cfg(test)]
   pub fn test() -> Self {
-    logger::init();
-    Self::new(Arc::new(rix_store::NoopStore))
+    logger::init().expect("unable to init logger");
+    Self::new(Arc::new(rix_store::NoopStore::default()))
   }
 
   pub fn eval_file<P: AsRef<Path>>(&self, path: P) -> Result<Value> {
@@ -835,7 +836,7 @@ impl Eval {
       throw!(pos, "filenames may not end in .drv");
     }
 
-    let p = self.store.add_to_store(
+    let p = self.store.add_path_to_store(
       path.file_name().and_then(|x| x.to_str()).unwrap_or(""),
       path,
       FileIngestionMethod::Recursive,
@@ -846,6 +847,32 @@ impl Eval {
     let realpath = self.store.print_store_path(&p);
     ctx.insert(realpath.clone());
     Ok(realpath)
+  }
+
+  pub fn print_value(&self, value: &Value, force: bool) -> Result<()> {
+    self.print_impl(value, force, &mut HashSet::new())?;
+    eprintln!();
+    Ok(())
+  }
+
+  fn print_impl(&self, value: &Value, force: bool, visited: &mut HashSet<*const ()>) -> Result<()> {
+    match value {
+      Value::Null => eprint!("null"),
+      Value::Bool(b) => eprint!("{}", b),
+      Value::Int(i) => eprint!("{}", i),
+      Value::Float(f) => eprint!("{}", f),
+      Value::String(s) => eprint!("{:?}", s.s),
+      Value::Path(p) => eprint!("{}", p.display()),
+      Value::Attrs(_) => {}
+      Value::List(_) => {}
+      Value::Apply(_, _) => {}
+      Value::Thunk(_) => {}
+      Value::Lambda(_, _) => {}
+      Value::Primop(_, _) => {}
+      Value::Blackhole => {}
+    }
+
+    Ok(())
   }
 }
 
@@ -922,8 +949,8 @@ mod tests {
   #[test]
   fn test_eval() -> NixResult {
     let e = Eval::test();
-    let expr = e.eval_inline("(import <nixpkgs> { overlays = []; }).stdenv.cc.outPath")?;
-    eprintln!("{}", expr.typename());
+    let expr = e.eval_inline("(import <nixpkgs> {}).stdenv.cc.outPath")?;
+    e.print_value(&expr, true)?;
 
     ok()
   }

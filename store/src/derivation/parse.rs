@@ -146,7 +146,7 @@ impl<'input> Parser<'input> {
   }
 
   fn expect<P: Pattern<'input> + Display + Copy>(&mut self, pat: P) -> Result<&'input str> {
-    if let Some(inp) = self.input().strip_prefix(pat) {
+    if let Some(inp) = self.input().matches(pat).next() {
       self.pos += inp.len();
       Ok(inp)
     } else {
@@ -228,16 +228,16 @@ impl<'input> Parser<'input> {
 
   fn err<T>(&self, k: ErrorKind) -> Result<T> {
     Err(Error {
-      pos: self.pos,
+      input: self.input().to_string(),
       kind: k,
     })
   }
 }
 
 #[derive(Debug, Display, Error)]
-#[display(fmt = "{}", kind)]
+#[display(fmt = "{}, at {:?}", kind, input)]
 struct Error {
-  pos: usize,
+  input: String,
   kind: ErrorKind,
 }
 

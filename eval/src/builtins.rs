@@ -1,6 +1,7 @@
 use super::*;
 use crossbeam::atomic::AtomicCell;
 use regex::Regex;
+use rix_store::DrvName;
 use serde_json::{Serializer, Value as JSON};
 use std::{
   borrow::Cow,
@@ -109,7 +110,7 @@ impl Init {
     self.add_constant(name, v);
   }
 
-  pub fn init(mut self) -> Attrs {
+  pub fn init<S: Store + ?Sized>(mut self, store: &S) -> Attrs {
     self.add_constant("true", Value::Bool(true));
     self.add_constant("false", Value::Bool(false));
     self.add_constant("null", Value::Null);
@@ -120,6 +121,10 @@ impl Init {
     self.add_constant("__currentSystem", Value::string("x86_64-linux"));
     self.add_constant("__nixPath", mk_nix_path());
     self.add_constant("__nixVersion", Value::string("2.3.9"));
+    self.add_constant(
+      "__storeDir",
+      Value::string(store.store_path().display().to_string()),
+    );
 
     // TODO: this should just be an `eval_file` but getting the thunk ordering right
     // is sort of a pain. on the plus side it only has to be forced once
@@ -155,12 +160,18 @@ impl Init {
     self.add_primop("__genericClosure", 1, prim_generic_closure);
     self.add_primop("__getEnv", 1, prim_getenv);
     self.add_primop("import", 1, prim_import);
+    self.add_primop("__parseDrvName", 1, prim_parse_drv_name);
     self.add_primop("__pathExists", 1, prim_path_exists);
+    self.add_primop("placeholder", 1, prim_placeholder);
     self.add_primop("__readFile", 1, prim_read_file);
     self.add_primop("scopedImport", 2, prim_scoped_import);
     self.add_primop("__seq", 2, prim_seq);
     self.add_primop("__toJSON", 1, prim_to_json);
     self.add_primop("__tryEval", 1, prim_try_eval);
+
+    self.add_primop("fetchTarball", 1, |eval, pos, args| {
+      fetch::fetch(eval, pos, args, "fetchTarball", true, "source".into())
+    });
 
     self.add_primop("__attrNames", 1, prim_attrnames);
     self.add_primop("__getAttr", 2, prim_get_attr);
@@ -174,6 +185,7 @@ impl Init {
     self.add_primop("__elem", 2, prim_elem);
     self.add_primop("__elemAt", 2, prim_elem_at);
     self.add_primop("__filter", 2, prim_filter);
+    self.add_primop("__foldl'", 3, prim_foldl_strict);
     self.add_primop("__genList", 2, prim_gen_list);
     self.add_primop("__head", 1, prim_head);
     self.add_primop("__length", 1, |eval, pos, args| {
@@ -184,6 +196,7 @@ impl Init {
 
     self.add_primop("__concatStringsSep", 2, prim_concat_strings_sep);
     self.add_primop("__match", 2, prim_match);
+    self.add_primop("__replaceStrings", 3, prim_replace_strings);
     self.add_primop("__split", 2, prim_split);
     self.add_primop("__stringLength", 1, |eval, pos, args| {
       Ok(Value::Int(
@@ -445,12 +458,38 @@ fn prim_base_name_of(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::String(path))
 }
 
+fn prim_parse_drv_name(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let n = DrvName::new(&*eval.force_string_no_context(pos, &args[0])?);
+  let mut attrs = Attrs::new();
+  attrs.insert(
+    Ident::from("name"),
+    Located {
+      pos,
+      v: vref(Value::string(n.name)),
+    },
+  );
+  attrs.insert(
+    Ident::from("version"),
+    Located {
+      pos,
+      v: vref(Value::string(n.version)),
+    },
+  );
+  Ok(Value::Attrs(Arc::new(attrs)))
+}
+
 fn prim_path_exists(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let mut ctx = PathSet::new();
   let path = eval.coerce_to_path(pos, &args[0], &mut ctx)?;
   eval.store.realise_context(&ctx)?;
 
   Ok(Value::Bool(path.exists()))
+}
+
+fn prim_placeholder(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let out = eval.force_string_no_context(pos, &args[0])?;
+  let place = Hash::placeholder(&*out);
+  Ok(Value::string(place))
 }
 
 fn prim_read_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
@@ -614,6 +653,66 @@ fn prim_concat_strings_sep(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Va
   }
 
   Ok(Value::String(Str { s: new, ctx }))
+}
+
+fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let from = eval.force_list(pos, &args[0])?;
+  let to = eval.force_list(pos, &args[1])?;
+  if from.len() != to.len() {
+    throw!(
+      pos,
+      "`from' and `to' arguments to `replaceStrings' have different lengths"
+    );
+  }
+
+  let mut from_list = vec![];
+  for f in from.iter() {
+    from_list.push(eval.force_string(pos, f)?);
+  }
+
+  let mut to_list = vec![];
+  for t in to.iter() {
+    to_list.push(eval.force_string(pos, t)?);
+  }
+
+  let Str {
+    s: haystack,
+    mut ctx,
+  } = eval.force_string(pos, &args[2])?.clone();
+
+  let mut output = String::new();
+
+  let mut p = 0;
+
+  while p <= haystack.len() {
+    let mut found = false;
+
+    for (ix, from) in from_list.iter().enumerate() {
+      let to = &to_list[ix];
+      if haystack.starts_with(&from.s) {
+        found = true;
+        output.push_str(&to.s);
+        if from.s.is_empty() {
+          if p < haystack.len() {
+            output.push(haystack.as_bytes()[p] as char);
+          }
+          p += 1;
+        } else {
+          p += from.s.len();
+        }
+        ctx.extend(to.ctx.iter().cloned());
+        break;
+      }
+    }
+    if !found {
+      if p < haystack.len() {
+        output.push(haystack.as_bytes()[p] as char);
+      }
+      p += 1;
+    }
+  }
+
+  Ok(Value::String(Str { s: output, ctx }))
 }
 
 lazy_static! {
@@ -794,6 +893,34 @@ fn prim_filter(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   }
 
   Ok(Value::List(Arc::new(new_list)))
+}
+
+fn prim_foldl_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  eval.expect_fn(pos, &args[0])?;
+  let items = eval.force_list(pos, &args[2])?;
+
+  let mut acc = &args[1];
+  let mut full_op;
+  for item in items.iter() {
+    let partial_op = vref(eval.call_function(pos, &args[0], acc)?);
+    full_op = vref(eval.call_function(pos, &partial_op, item)?);
+    acc = &full_op;
+  }
+
+  eval.clone_value(pos, acc)
+}
+
+#[test]
+fn test_foldl_strict() -> NixResult {
+  let e = Eval::test();
+  e.assert(
+    r#"
+    builtins.foldl' (x: y: "${x}-${y}") "a" ["b" "c" "d"]
+      == "a-b-c-d"
+  "#,
+  )?;
+
+  ok()
 }
 
 fn prim_try_eval(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
