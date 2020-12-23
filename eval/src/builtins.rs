@@ -213,16 +213,16 @@ impl Init {
       Ok(Value::string(s.s))
     });
 
-    self.add_primop("__isAttrs", 1, checktype!(Value::Attrs {..}));
-    self.add_primop("__isBool", 1, checktype!(Value::Bool {..}));
+    self.add_primop("__isAttrs", 1, checktype!(Value::Attrs { .. }));
+    self.add_primop("__isBool", 1, checktype!(Value::Bool { .. }));
     self.add_primop(
       "__isFunction",
       1,
-      checktype!(Value::Lambda {..} | Value::Primop {..}),
+      checktype!(Value::Lambda { .. } | Value::Primop { .. }),
     );
-    self.add_primop("__isList", 1, checktype!(Value::List {..}));
+    self.add_primop("__isList", 1, checktype!(Value::List { .. }));
     self.add_primop("isNull", 1, checktype!(Value::Null));
-    self.add_primop("__isString", 1, checktype!(Value::String {..}));
+    self.add_primop("__isString", 1, checktype!(Value::String { .. }));
 
     self.finish()
   }
@@ -277,7 +277,7 @@ fn components_lt(s1: &str, s2: &str) -> bool {
   let num2 = s2.parse::<i64>().ok();
   if let (Some(n1), Some(n2)) = (num1, num2) {
     n1 < n2
-  } else if s1 == "" && num2.is_some() || s1 == "pre" && s2 != "pre" {
+  } else if s1.is_empty() && num2.is_some() || s1 == "pre" && s2 != "pre" {
     true
   } else if s2 == "pre" {
     false

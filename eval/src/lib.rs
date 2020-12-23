@@ -61,7 +61,7 @@ impl Eval {
   #[cfg(test)]
   pub fn test() -> Self {
     logger::init().expect("unable to init logger");
-    Self::new(Arc::new(rix_store::NoopStore::default()))
+    Self::new(Arc::new(rix_store::TestStore::default()))
   }
 
   pub fn eval_file<P: AsRef<Path>>(&self, path: P) -> Result<Value> {
@@ -841,7 +841,7 @@ impl Eval {
       path,
       FileIngestionMethod::Recursive,
       HashType::SHA256,
-      (),
+      &PathFilter::none(),
       Repair::Off,
     )?;
     let realpath = self.store.print_store_path(&p);

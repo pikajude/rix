@@ -882,6 +882,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "psm"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3abf49e5417290756acfd26501536358560c4a5cc4a0934d390939acb3e7083a"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1098,17 +1107,22 @@ dependencies = [
  "assert_matches",
  "base64",
  "binascii",
+ "crossbeam",
  "derivative",
  "derive_more",
  "dirs 3.0.1",
  "enum-as-inner",
  "hex",
  "lazy_static",
+ "nix",
  "parking_lot",
  "proptest",
  "rix-util",
+ "rm_rf",
  "rust-crypto",
  "slog-scope",
+ "tee_readwrite",
+ "tempfile",
  "thiserror",
 ]
 
@@ -1150,6 +1164,7 @@ dependencies = [
  "derive_more",
  "hex",
  "lazy_static",
+ "nix",
  "once_cell",
  "parking_lot",
  "proptest",
@@ -1163,6 +1178,15 @@ dependencies = [
  "string_cache",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "rm_rf"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "047ab6155a1d09020e6d073998d51e941fc66260b3bb73839e1bcdb1c472d721"
+dependencies = [
+ "stacker",
 ]
 
 [[package]]
@@ -1380,6 +1404,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "stacker"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21ccb4c06ec57bc82d0f610f1a2963d7648700e43a6f513e564b9c89f7991786"
+dependencies = [
+ "cc",
+ "cfg-if 0.1.10",
+ "libc",
+ "psm",
+ "winapi",
+]
+
+[[package]]
 name = "std_prelude"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1430,6 +1467,12 @@ name = "take_mut"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f764005d11ee5f36500a149ace24e00e3da98b0158b3e2d53a7495660d3f4d60"
+
+[[package]]
+name = "tee_readwrite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0642ac8a287350e5bd14ac50e7a137d49432ae625a1ae83668323ef3ca466af8"
 
 [[package]]
 name = "tempfile"

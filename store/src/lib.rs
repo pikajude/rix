@@ -8,7 +8,7 @@
 
 use anyhow::Result;
 pub use prelude::StorePath;
-use rix_util::*;
+use rix_util::{nar::PathFilter, *};
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   io::Read,
@@ -16,15 +16,15 @@ use std::{
 };
 
 pub mod derivation;
-mod noop_store;
 pub mod path;
 pub mod path_info;
 mod prelude;
+mod test;
 
 pub use derivation::{Derivation, DerivationType, DrvName, HashModulo, Output};
-pub use noop_store::NoopStore;
 pub use path_info::ValidPathInfo;
 pub use prelude::{FileIngestionMethod, Repair};
+pub use test::TestStore;
 
 pub type PathSet = BTreeSet<String>;
 pub type StorePathSet = BTreeSet<StorePath>;
@@ -236,7 +236,7 @@ pub trait Store: Send + Sync {
     path: &Path,
     method: FileIngestionMethod,
     hash_type: HashType,
-    path_filter: (),
+    path_filter: &PathFilter,
     repair: Repair,
   ) -> Result<StorePath>;
 
@@ -245,6 +245,15 @@ pub trait Store: Send + Sync {
     name: &str,
     contents: &[u8],
     refs: &StorePathSet,
+    repair: Repair,
+  ) -> Result<StorePath>;
+
+  fn add_dump_to_store(
+    &self,
+    source: Box<dyn Read>,
+    name: &str,
+    method: FileIngestionMethod,
+    algo: HashType,
     repair: Repair,
   ) -> Result<StorePath>;
 

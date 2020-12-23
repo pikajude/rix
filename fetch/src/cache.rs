@@ -3,7 +3,7 @@ use parking_lot::Mutex;
 use rix_store::{Store, StorePath};
 use rix_util::*;
 use rusqlite::{named_params, Connection};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use std::{path::Path, time::SystemTime};
 
 static CACHE: OnceCell<Cache> = OnceCell::new();

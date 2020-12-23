@@ -33,8 +33,10 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
     ignore_nulls = eval.force_bool(pos, &s.v)?;
   }
 
-  let mut drv = Derivation::default();
-  drv.name = drv_name.to_string();
+  let mut drv = Derivation {
+    name: drv_name.to_string(),
+    ..Default::default()
+  };
 
   let mut ctx = PathSet::new();
 

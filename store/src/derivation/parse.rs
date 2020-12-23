@@ -10,8 +10,10 @@ impl Derivation {
     contents: C,
   ) -> anyhow::Result<Self> {
     let contents = contents.as_ref();
-    let mut drv = Self::default();
-    drv.name = name;
+    let mut drv = Self {
+      name,
+      ..Default::default()
+    };
     let mut parser = Parser::new(contents);
 
     parser.expect("Derive([")?;

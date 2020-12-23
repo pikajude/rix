@@ -1,5 +1,6 @@
 #![feature(pattern)]
 #![feature(termination_trait_lib)]
+#![feature(trait_alias)]
 #![feature(try_trait)]
 
 #[macro_use] extern crate derive_more;
@@ -14,7 +15,8 @@ use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 pub use cons_list::*;
 use error::Catchable;
 pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
-pub use hash::{Encoding, Hash, HashType};
+pub use hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
+pub use nar::PathFilter;
 use parking_lot::Mutex;
 pub use pos::*;
 use std::{
@@ -31,6 +33,7 @@ pub mod error;
 pub mod hash;
 pub mod logger;
 pub mod nar;
+pub mod pipe;
 mod pos;
 
 lazy_static! {

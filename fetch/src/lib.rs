@@ -9,7 +9,7 @@ mod cache;
 use cache::Cache;
 use curl::easy::{Easy, HttpVersion, WriteError};
 use rix_store::{FileIngestionMethod, Repair, Store, StorePath, ValidPathInfo};
-use rix_util::*;
+use rix_util::{nar::PathFilter, *};
 use serde_json::{Map, Value};
 use slog::{Drain, Level};
 use std::{
@@ -96,7 +96,7 @@ pub fn download_tarball<S: Store + ?Sized>(
       &topdir.path(),
       FileIngestionMethod::Recursive,
       HashType::SHA256,
-      (),
+      &PathFilter::none(),
       Repair::Off,
     )?;
   }
@@ -142,8 +142,10 @@ pub fn download_file<S: Store + ?Sized>(
     }
   }
 
-  let mut request = RequestInfo::default();
-  request.url = url.to_string();
+  let mut request = RequestInfo {
+    url: url.to_string(),
+    ..Default::default()
+  };
 
   if let Some(c) = &cached {
     request.expect_etag = Some(get_str(&c.info, "etag")?);
@@ -279,7 +281,7 @@ fn curl(mut req: RequestInfo) -> Result<CurlDownload> {
   easy.low_speed_time(Duration::from_secs(300))?;
 
   let mut etag = None;
-  let mut output = hash::Sink::new(HashType::SHA256, tempfile::tempfile()?);
+  let mut output = HashSink::new(HashType::SHA256, tempfile::tempfile()?);
   let mut got_status200 = false;
   let curl_res = {
     let mut tx = easy.transfer();
