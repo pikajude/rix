@@ -7,6 +7,7 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate serde;
 #[macro_use] extern crate thiserror;
+#[macro_use] extern crate slog_scope;
 
 #[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
 #[doc(no_inline)] pub use codespan::{FileId, Files, Span};
@@ -19,6 +20,8 @@ pub use hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSin
 pub use nar::PathFilter;
 use parking_lot::Mutex;
 pub use pos::*;
+pub use rusqlite::{named_params, params, OptionalExtension as _};
+pub use sqlite::Sqlite;
 use std::{
   fmt::{self, Debug, Display, Formatter},
   ops::Try,
@@ -35,6 +38,7 @@ pub mod logger;
 pub mod nar;
 pub mod pipe;
 mod pos;
+pub mod sqlite;
 
 lazy_static! {
   #[doc(hidden)]

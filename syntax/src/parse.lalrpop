@@ -313,14 +313,7 @@ expr_simple: Expr = {
 }
 
 ind_string_parts: Expr = {
-  S<ind_string_part*> => if <>.v.is_empty() {
-    Expr::string("")
-  } else if <>.v.len() == 1 {
-    let mut x = <>.v;
-    x.pop().unwrap()
-  } else {
-    Expr::ConcatStrings { pos: <>.pos, force_string: true, parts: <>.v }
-  }
+  S<ind_string_part*> => unindent(<>.pos, <>.v)
 }
 
 ind_string_part: Expr = {

@@ -13,7 +13,7 @@ use rix_syntax::{
 };
 use rix_util::*;
 use std::{
-  collections::{HashMap, HashSet},
+  collections::HashMap,
   path::{Path, PathBuf},
   sync::Arc,
 };
@@ -22,9 +22,10 @@ use value::*;
 mod builtins;
 mod derivation;
 mod fetch;
+mod print;
 mod value;
 
-fn vref(v: Value) -> ValueRef {
+pub fn vref(v: Value) -> ValueRef {
   Arc::new(RwLock::new(v))
 }
 
@@ -45,7 +46,7 @@ impl Default for CoerceOpts {
 
 pub struct Eval {
   base_env: Env,
-  store: Arc<dyn Store>,
+  pub store: Arc<dyn Store>,
   eval_cache: Mutex<HashMap<PathBuf, ValueRef>>,
 }
 
@@ -61,7 +62,9 @@ impl Eval {
   #[cfg(test)]
   pub fn test() -> Self {
     logger::init().expect("unable to init logger");
-    Self::new(Arc::new(rix_store::TestStore::default()))
+    Self::new(Arc::new(
+      rix_store::LocalStore::new().expect("unable to open local store"),
+    ))
   }
 
   pub fn eval_file<P: AsRef<Path>>(&self, path: P) -> Result<Value> {
@@ -390,18 +393,7 @@ impl Eval {
           if !no_eval {
             let _ = self.force(pos, &d)?;
           }
-          if let Some(a) = d
-            .try_read()
-            .ok_or_else(|| {
-              err!(
-                pos,
-                "deadlock while looking up `{}' in envs: {:?}",
-                var,
-                env
-              )
-            })?
-            .as_attrs()
-          {
+          if let Some(a) = d.read().as_attrs() {
             do_lookup!(a)
           } else if no_eval {
             break;
@@ -793,7 +785,7 @@ impl Eval {
       .map_err(|v| err!(pos, "expected attrset, got {}", v.typename()))
   }
 
-  fn force_list<'v>(
+  pub fn force_list<'v>(
     &self,
     pos: Pos,
     v: &'v ValueRef,
@@ -802,7 +794,7 @@ impl Eval {
       .map_err(|v| err!(pos, "expected list, got {}", v.typename()))
   }
 
-  fn force_string_no_context<'v>(
+  pub fn force_string_no_context<'v>(
     &self,
     pos: Pos,
     v: &'v ValueRef,
@@ -820,7 +812,11 @@ impl Eval {
     })
   }
 
-  fn force_string<'v>(&self, pos: Pos, v: &'v ValueRef) -> Result<MappedRwLockReadGuard<'v, Str>> {
+  pub fn force_string<'v>(
+    &self,
+    pos: Pos,
+    v: &'v ValueRef,
+  ) -> Result<MappedRwLockReadGuard<'v, Str>> {
     RwLockReadGuard::try_map(self.force(pos, v)?, |m| m.as_string())
       .map_err(|v| err!(pos, "expected string, got {}", v.typename()))
   }
@@ -847,32 +843,6 @@ impl Eval {
     let realpath = self.store.print_store_path(&p);
     ctx.insert(realpath.clone());
     Ok(realpath)
-  }
-
-  pub fn print_value(&self, value: &Value, force: bool) -> Result<()> {
-    self.print_impl(value, force, &mut HashSet::new())?;
-    eprintln!();
-    Ok(())
-  }
-
-  fn print_impl(&self, value: &Value, force: bool, visited: &mut HashSet<*const ()>) -> Result<()> {
-    match value {
-      Value::Null => eprint!("null"),
-      Value::Bool(b) => eprint!("{}", b),
-      Value::Int(i) => eprint!("{}", i),
-      Value::Float(f) => eprint!("{}", f),
-      Value::String(s) => eprint!("{:?}", s.s),
-      Value::Path(p) => eprint!("{}", p.display()),
-      Value::Attrs(_) => {}
-      Value::List(_) => {}
-      Value::Apply(_, _) => {}
-      Value::Thunk(_) => {}
-      Value::Lambda(_, _) => {}
-      Value::Primop(_, _) => {}
-      Value::Blackhole => {}
-    }
-
-    Ok(())
   }
 }
 
@@ -949,8 +919,8 @@ mod tests {
   #[test]
   fn test_eval() -> NixResult {
     let e = Eval::test();
-    let expr = e.eval_inline("(import <nixpkgs> {}).stdenv.cc.outPath")?;
-    e.print_value(&expr, true)?;
+    let expr = e.eval_inline("(import <nixpkgs> {}).stdenv.cc")?;
+    e.print(&super::vref(expr))?;
 
     ok()
   }

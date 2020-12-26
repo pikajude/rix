@@ -1,30 +1,33 @@
 #![feature(pattern)]
 #![feature(str_split_once)]
+#![feature(try_blocks)]
 
 #[macro_use] extern crate derivative;
 #[macro_use] extern crate derive_more;
 #[macro_use] extern crate enum_as_inner;
 #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate slog_scope;
 
 use anyhow::Result;
 pub use prelude::StorePath;
-use rix_util::{nar::PathFilter, *};
+use rix_util::*;
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   io::Read,
   path::{Path, PathBuf},
 };
 
+pub mod build;
 pub mod derivation;
+mod local;
 pub mod path;
 pub mod path_info;
 mod prelude;
-mod test;
 
 pub use derivation::{Derivation, DerivationType, DrvName, HashModulo, Output};
+pub use local::LocalStore;
 pub use path_info::ValidPathInfo;
 pub use prelude::{FileIngestionMethod, Repair};
-pub use test::TestStore;
 
 pub type PathSet = BTreeSet<String>;
 pub type StorePathSet = BTreeSet<StorePath>;
@@ -60,7 +63,9 @@ pub trait Store: Send + Sync {
     path.starts_with(self.store_path())
   }
 
-  fn is_valid_path(&self, path: &StorePath) -> bool;
+  fn is_valid_path(&self, path: &StorePath) -> Result<bool> {
+    self.query_path_info(path).map(|x| x.is_some())
+  }
 
   fn compute_fs_closure(&self, path: &StorePath, closure: &mut StorePathSet) -> Result<()>;
 
@@ -276,6 +281,20 @@ pub trait Store: Send + Sync {
   fn realise_context(&self, context: &PathSet) -> Result<()>;
 
   fn check_uri(&self, uri: &str) -> Result<()>;
+
+  fn register_valid_paths(&self, infos: Vec<ValidPathInfo>) -> Result<()>;
+
+  fn register_valid_path(&self, info: ValidPathInfo) -> Result<()> {
+    self.register_valid_paths(vec![info])
+  }
+
+  fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>>;
+
+  fn get_path_info(&self, path: &StorePath) -> Result<ValidPathInfo> {
+    self
+      .query_path_info(path)?
+      .ok_or_else(|| anyhow!("path {} is not valid", self.print_store_path(path)))
+  }
 }
 
 fn make_type<S: Store + ?Sized>(

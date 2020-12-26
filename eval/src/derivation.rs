@@ -3,7 +3,6 @@ use rix_store::{
   derivation::{FixedOutputHash, HashModulo, Output},
   Derivation, FileIngestionMethod, Repair,
 };
-use serde_json::Value as JSON;
 use std::collections::BTreeSet;
 
 fn decode_context(s: &str) -> (&str, &str) {
@@ -20,6 +19,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
   let drv_name_pos = drv_name.pos;
   let drv_name = eval.force_string_no_context(pos, &drv_name.v)?;
 
+  /*
   let mut json_object;
 
   if let Some(s) = drv_attrs.get(&Ident::from("__structuredAttrs")) {
@@ -27,6 +27,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
       json_object = JSON::Object(Default::default());
     }
   }
+  */
 
   let mut ignore_nulls = false;
   if let Some(s) = drv_attrs.get(&Ident::from("__ignoreNulls")) {

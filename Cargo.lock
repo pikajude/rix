@@ -1057,6 +1057,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rix-build"
+version = "0.1.0"
+dependencies = [
+ "rix-eval",
+ "rix-store",
+ "rix-util",
+]
+
+[[package]]
 name = "rix-eval"
 version = "0.1.0"
 dependencies = [
@@ -1075,6 +1084,7 @@ dependencies = [
  "serde_json",
  "slog-scope",
  "smallvec",
+ "termcolor",
  "thiserror",
 ]
 
@@ -1104,7 +1114,6 @@ name = "rix-store"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "assert_matches",
  "base64",
  "binascii",
  "crossbeam",
@@ -1112,13 +1121,12 @@ dependencies = [
  "derive_more",
  "dirs 3.0.1",
  "enum-as-inner",
- "hex",
  "lazy_static",
  "nix",
  "parking_lot",
- "proptest",
  "rix-util",
  "rm_rf",
+ "rusqlite",
  "rust-crypto",
  "slog-scope",
  "tee_readwrite",
@@ -1168,6 +1176,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "proptest",
+ "rusqlite",
  "rust-crypto",
  "serde",
  "slog",
@@ -1176,7 +1185,6 @@ dependencies = [
  "slog-stdlog",
  "slog-term",
  "string_cache",
- "tempfile",
  "thiserror",
 ]
 

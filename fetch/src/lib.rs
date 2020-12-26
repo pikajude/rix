@@ -9,7 +9,7 @@ mod cache;
 use cache::Cache;
 use curl::easy::{Easy, HttpVersion, WriteError};
 use rix_store::{FileIngestionMethod, Repair, Store, StorePath, ValidPathInfo};
-use rix_util::{nar::PathFilter, *};
+use rix_util::*;
 use serde_json::{Map, Value};
 use slog::{Drain, Level};
 use std::{
@@ -39,6 +39,7 @@ struct FileInfo<'s> {
 #[derive(Serialize)]
 struct TarballInfo<'s> {
   etag: Option<&'s str>,
+  #[serde(rename = "lastModified")]
   last_modified: i64,
 }
 

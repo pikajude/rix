@@ -1,29 +1,48 @@
 use super::*;
-use rix_util::nar::PathFilter;
 use slog_scope::*;
-use std::fs::File;
+use std::{
+  fs::File,
+  time::{Duration, SystemTime},
+};
 
-pub struct TestStore(PathBuf);
+const QUERY_PATH_INFO: &str = "select id, hash, registrationTime, deriver, narSize, ultimate, \
+                               sigs, ca from ValidPaths where path = ?";
 
-impl TestStore {
-  pub fn new() -> Self {
-    let d = dirs::data_dir()
-      .expect("no data dir set")
-      .join("rix/nostore");
-    std::fs::create_dir_all(&d).expect("unable to create tmpdir");
-    Self(d)
+const QUERY_REFS: &str =
+  "select path from Refs join ValidPaths on reference = id where referrer = ?";
+
+pub struct LocalStore {
+  store: PathBuf,
+  db: Sqlite,
+}
+
+impl LocalStore {
+  pub fn new() -> Result<Self> {
+    let d = dirs::data_dir().expect("no data dir set");
+    let basedir = d.join("rix");
+    let storedir = basedir.join("store");
+    let dbdir = basedir.join("db");
+
+    std::fs::create_dir_all(&storedir)?;
+    std::fs::create_dir_all(&dbdir)?;
+
+    let db = Sqlite::open(dbdir.join("rix.sqlite"))?;
+
+    db.lock().execute_batch(include_str!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/schema.sql"
+    )))?;
+
+    Ok(Self {
+      store: storedir,
+      db,
+    })
   }
 }
 
-impl Default for TestStore {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-impl Store for TestStore {
+impl Store for LocalStore {
   fn store_path(&self) -> &Path {
-    &self.0
+    &self.store
   }
 
   fn compute_fs_closure(&self, path: &StorePath, _: &mut StorePathSet) -> Result<()> {
@@ -110,14 +129,8 @@ impl Store for TestStore {
     Ok(())
   }
 
-  fn is_valid_path(&self, path: &StorePath) -> bool {
-    self.to_real_path(path).exists()
-  }
-
   fn add_to_store(&self, path_info: ValidPathInfo, source: Box<dyn Read>, _: Repair) -> Result<()> {
-    warn!("NOOP: add calculated path to store: {:?}", path_info);
-
-    if !self.is_valid_path(&path_info.path) {
+    if !self.is_valid_path(&path_info.path)? {
       let real_path = self.to_real_path(&path_info.path);
 
       rm_rf::ensure_removed(&real_path)?;
@@ -151,6 +164,8 @@ impl Store for TestStore {
           hash_len
         );
       }
+
+      self.register_valid_path(path_info)?;
     }
 
     Ok(())
@@ -181,7 +196,7 @@ impl Store for TestStore {
 
     let dst_path = self.make_fixed_output_path(method, hash, name, &Default::default(), false)?;
 
-    if !self.is_valid_path(&dst_path) {
+    if !self.is_valid_path(&dst_path)? {
       let real_path = self.to_real_path(&dst_path);
 
       rm_rf::ensure_removed(&real_path)?;
@@ -192,8 +207,108 @@ impl Store for TestStore {
     let mut info = ValidPathInfo::new(dst_path.clone(), hash);
     info.nar_size = Some(size);
 
-    warn!("register path: {:?}", info);
+    self.register_valid_path(info)?;
 
     Ok(dst_path)
+  }
+
+  fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>> {
+    let db = self.db.lock();
+
+    let mut stmt = db.prepare(QUERY_PATH_INFO)?;
+
+    let mut iter = stmt.query_and_then::<_, anyhow::Error, _, _>(
+      params![self.print_store_path(path)],
+      |row| {
+        let hash = Hash::decode(row.get::<_, String>("hash")?).with_context(|| {
+          format!(
+            "path-info entry for `{}' is invalid",
+            self.print_store_path(path)
+          )
+        })?;
+
+        let mut path_info = ValidPathInfo::new(path.clone(), hash);
+
+        path_info.id = row.get::<_, i64>("id")?;
+        path_info.registration_time = Some(
+          SystemTime::UNIX_EPOCH
+            + Duration::from_secs(row.get::<_, i64>("registrationTime")? as u64),
+        );
+
+        let deriver_path = row.get::<_, String>("deriver")?;
+        if !deriver_path.is_empty() {
+          path_info.deriver = Some(self.parse_store_path(Path::new(&deriver_path))?);
+        }
+
+        path_info.nar_size = Some(row.get::<_, i64>("narSize")? as _);
+        path_info.ultimate = row.get("ultimate")?;
+
+        Ok(path_info)
+      },
+    )?;
+
+    if let Some(mut info) = iter.next().transpose()? {
+      let mut stmt = db.prepare(QUERY_REFS)?;
+
+      for ref_ in stmt.query_and_then(params![info.id], |row| row.get::<_, String>("path"))? {
+        info.refs.insert(self.parse_store_path(Path::new(&ref_?))?);
+      }
+
+      Ok(Some(info))
+    } else {
+      Ok(None)
+    }
+  }
+
+  fn register_valid_paths(&self, infos: Vec<ValidPathInfo>) -> Result<()> {
+    const REGISTER_VALID: &str = "insert into ValidPaths (path, hash, registrationTime, deriver, \
+                                  narSize, ultimate, sigs, ca) values (?, ?, ?, ?, ?, ?, ?, ?)";
+    const UPDATE_VALID: &str =
+      "update ValidPaths set narSize = ?, hash = ?, ultimate = ?, sigs = ?, ca = ? where id = ?";
+
+    let db = self.db.lock();
+
+    for info in infos {
+      let path = self.print_store_path(&info.path);
+
+      if let Some(current_id) = db
+        .query_row::<i64, _, _>(
+          "select id from ValidPaths where path = ?",
+          params![&path],
+          |r| r.get("id"),
+        )
+        .optional()?
+      {
+        db.execute(
+          UPDATE_VALID,
+          params![
+            info.nar_size.unwrap_or_default() as i64,
+            info.nar_hash.encode_with_type(Encoding::Base16),
+            info.ultimate,
+            "",
+            "",
+            current_id
+          ],
+        )?;
+      } else {
+        db.execute(
+          REGISTER_VALID,
+          params![
+            path,
+            info.nar_hash.encode_with_type(Encoding::Base16),
+            info.registration_time_sql(),
+            info
+              .deriver
+              .map_or_else(String::new, |d| self.print_store_path(&d)),
+            info.nar_size.unwrap_or_default() as i64,
+            info.ultimate,
+            "",
+            ""
+          ],
+        )?;
+      }
+    }
+
+    Ok(())
   }
 }

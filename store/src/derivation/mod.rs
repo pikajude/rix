@@ -97,6 +97,12 @@ pub struct Derivation {
   pub input_derivations: BTreeMap<StorePath, BTreeSet<String>>,
 }
 
+impl Derivation {
+  pub fn is_builtin(&self) -> bool {
+    self.builder.to_string_lossy().starts_with("builtin:")
+  }
+}
+
 pub type OutputsAndPaths = BTreeMap<String, (Output, Option<StorePath>)>;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]

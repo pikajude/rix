@@ -63,7 +63,7 @@ pub fn fetch(
 
   if let Some(e) = expected_hash {
     let actual = if unpack {
-      todo!()
+      eval.store.get_path_info(&store_path)?.nar_hash
     } else {
       Hash::hash_file(&real_path, HashType::SHA256)?.0
     };

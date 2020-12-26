@@ -15,7 +15,7 @@ pub type PathSet = BTreeSet<String>;
 pub type Attrs = BTreeMap<Ident, Located<ValueRef>>;
 pub type PrimopArgs = SmallVec<[ValueRef; 3]>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Env {
   pub envs: ConsList<Scope>,
   pub with: ConsList<ValueRef>,
@@ -62,7 +62,7 @@ impl Debug for Scope {
   }
 }
 
-#[derive(Debug, Clone, EnumAsInner)]
+#[derive(Clone, EnumAsInner)]
 pub enum Value {
   Null,
   Bool(bool),
@@ -106,7 +106,10 @@ impl Value {
   }
 
   pub fn needs_eval(&self) -> bool {
-    matches!(self, Self::Thunk{..} | Self::Apply{..} | Self::Blackhole)
+    matches!(
+      self,
+      Self::Thunk { .. } | Self::Apply { .. } | Self::Blackhole
+    )
   }
 }
 
@@ -116,7 +119,6 @@ pub struct Str {
   pub ctx: BTreeSet<String>,
 }
 
-#[derive(Debug)]
 pub struct Thunk(pub Env, pub ExprRef);
 
 impl Thunk {

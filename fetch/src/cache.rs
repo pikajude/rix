@@ -1,8 +1,6 @@
 use once_cell::sync::OnceCell;
-use parking_lot::Mutex;
 use rix_store::{Store, StorePath};
 use rix_util::*;
-use rusqlite::{named_params, Connection};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{path::Path, time::SystemTime};
 
@@ -19,15 +17,15 @@ pub struct CacheItem<I> {
   pub path: StorePath,
 }
 
-pub struct Cache(Mutex<Connection>);
+pub struct Cache(Sqlite);
 
 impl Cache {
   fn open() -> Result<Self> {
-    let cache_dir = dirs::cache_dir().expect("no cache dir").join("nix");
+    let cache_dir = dirs::cache_dir().expect("no cache dir").join("rix");
     std::fs::create_dir_all(&cache_dir)?;
-    let conn = Connection::open(cache_dir.join("fetcher-cache-v1.sqlite"))?;
+    let conn = Sqlite::open(cache_dir.join("fetcher-cache-v1.sqlite"))?;
 
-    conn.execute_batch(
+    conn.lock().execute_batch(
       "
         pragma synchronous = off;
         pragma main.journal_mode = truncate;
@@ -42,7 +40,7 @@ impl Cache {
       ",
     )?;
 
-    Ok(Self(Mutex::new(conn)))
+    Ok(Self(conn))
   }
 
   pub fn get() -> Result<&'static Self> {
@@ -75,16 +73,6 @@ impl Cache {
     Ok(())
   }
 
-  pub fn lookup<S: Store + ?Sized, A: Serialize, I: DeserializeOwned>(
-    &self,
-    store: &S,
-    info: &A,
-  ) -> Result<Option<CacheItem<I>>> {
-    self
-      .lookup_expired(store, info)
-      .map(|x| x.and_then(|item| if item.expired { None } else { Some(item) }))
-  }
-
   pub fn lookup_expired<S: Store + ?Sized, A: Serialize, I: DeserializeOwned>(
     &self,
     store: &S,
@@ -102,7 +90,7 @@ impl Cache {
         let immutable = row.get::<_, bool>(2)?;
         let timestamp = row.get::<_, i64>(3)?;
 
-        if !store.is_valid_path(&store_path) {
+        if !store.is_valid_path(&store_path)? {
           debug!("ignoring disappeared cache entry");
           return Ok(None);
         }

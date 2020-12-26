@@ -11,26 +11,33 @@ pub struct ValidPathInfo {
   pub nar_size: Option<usize>,
   pub refs: StorePathSet,
   pub registration_time: Option<SystemTime>,
+  pub ultimate: bool,
   // for sqlite
+  #[doc(hidden)]
   #[derivative(Debug = "ignore")]
-  id: i64,
+  pub id: i64,
 }
 
 impl ValidPathInfo {
-  pub fn ultimate(&self) -> bool {
-    todo!()
-  }
-
   pub fn new(path: StorePath, nar_hash: Hash) -> Self {
     Self {
       path,
       nar_hash,
       deriver: None,
+      ultimate: false,
       nar_size: None,
       refs: Default::default(),
       registration_time: None,
       id: 0,
     }
+  }
+
+  pub fn registration_time_sql(&self) -> i64 {
+    self.registration_time.map_or(0, |t| {
+      t.duration_since(SystemTime::UNIX_EPOCH)
+        .expect("registration type is earlier than 0")
+        .as_secs() as _
+    })
   }
 }
 
