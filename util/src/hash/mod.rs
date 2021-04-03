@@ -98,7 +98,7 @@ impl Hash {
 
   /// Encode to serialized representation
   pub fn encode(&self, encoding: Encoding) -> String {
-    if encoding == Encoding::SRI {
+    if encoding == Encoding::Sri {
       return self.encode_with_type(encoding);
     }
     let mut s = String::new();
@@ -108,7 +108,7 @@ impl Hash {
 
   pub fn encode_with_type(&self, encoding: Encoding) -> String {
     let mut s = self.ty.to_string();
-    if encoding == Encoding::SRI {
+    if encoding == Encoding::Sri {
       s.push('-');
     } else {
       s.push(':');
@@ -129,7 +129,7 @@ impl Hash {
         base32::encode_into(self.as_bytes(), &mut bytes);
         bytes
       }
-      Encoding::Base64 | Encoding::SRI => {
+      Encoding::Base64 | Encoding::Sri => {
         let mut bytes = vec![0; self.len_base64()];
         binascii::b64encode(self.as_bytes(), &mut bytes).expect("Incorrect buffer size");
         bytes
@@ -277,5 +277,5 @@ pub enum Encoding {
   Base64,
   Base32,
   Base16,
-  SRI,
+  Sri,
 }

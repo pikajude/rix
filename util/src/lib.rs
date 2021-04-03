@@ -2,6 +2,7 @@
 #![feature(termination_trait_lib)]
 #![feature(trait_alias)]
 #![feature(try_trait)]
+#![feature(assert_matches)]
 
 #[macro_use] extern crate derive_more;
 #[macro_use] extern crate lazy_static;

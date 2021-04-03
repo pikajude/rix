@@ -166,7 +166,7 @@ fn do_restore<R: Read>(src: &mut Source<R>, path: &Path) -> Result<()> {
     File,
     Dir,
     Link,
-  };
+  }
 
   let mut cur_type = PathType::Unknown;
   let mut cur_file = None;

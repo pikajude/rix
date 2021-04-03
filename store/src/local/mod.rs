@@ -12,6 +12,7 @@ const QUERY_REFS: &str =
   "select path from Refs join ValidPaths on reference = id where referrer = ?";
 
 pub struct LocalStore {
+  basedir: PathBuf,
   store: PathBuf,
   db: Sqlite,
 }
@@ -34,6 +35,7 @@ impl LocalStore {
     )))?;
 
     Ok(Self {
+      basedir,
       store: storedir,
       db,
     })
@@ -65,7 +67,7 @@ impl Store for LocalStore {
     )
   }
 
-  fn read_invalid_derivation(&self, path: &StorePath) -> Result<Derivation> {
+  fn try_read_derivation(&self, path: &StorePath) -> Result<Derivation> {
     self.read_derivation(path)
   }
 
@@ -310,5 +312,16 @@ impl Store for LocalStore {
     }
 
     Ok(())
+  }
+
+  fn log_file_of(&self, path: &StorePath) -> PathBuf {
+    let mut log_part0 = path.to_string();
+    let log_part1 = log_part0.split_off(2);
+
+    self
+      .basedir
+      .join("var/log/nix/drvs")
+      .join(log_part0)
+      .join(log_part1)
   }
 }

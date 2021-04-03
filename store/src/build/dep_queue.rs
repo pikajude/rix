@@ -101,6 +101,7 @@ impl<N: Hash + Eq + Clone, E: Eq + Hash + Clone, V> DependencyQueue<N, E, V> {
     self.dep_map.is_empty()
   }
 
+  #[allow(dead_code)]
   pub fn len(&self) -> usize {
     self.dep_map.len()
   }

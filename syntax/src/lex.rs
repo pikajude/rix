@@ -139,7 +139,7 @@ impl<'a> Iterator for Lexer<'a> {
           return Some(Ok((start, $cb(m.as_str()), self.at)));
         }
       };
-    };
+    }
 
     macro_rules! skip {
       ($regex:ident) => {

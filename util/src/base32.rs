@@ -125,7 +125,6 @@ pub fn decode(input: &[u8]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use assert_matches::*;
   use proptest::*;
 
   #[test]

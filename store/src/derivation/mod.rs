@@ -59,7 +59,7 @@ pub enum Output {
 }
 
 impl Output {
-  pub fn path<S: Store + ?Sized>(
+  pub fn get_path<S: Store + ?Sized>(
     &self,
     store: &S,
     drv_name: &str,
@@ -71,6 +71,17 @@ impl Output {
       Output::Floating(_, _) => None,
       Output::Deferred => None,
     })
+  }
+
+  pub fn path<S: Store + ?Sized>(
+    &self,
+    store: &S,
+    drv_name: &str,
+    output_name: &str,
+  ) -> Result<Cow<StorePath>> {
+    self
+      .get_path(store, drv_name, output_name)?
+      .ok_or_else(|| anyhow!("output {:?} is required to have a specified path", self))
   }
 }
 

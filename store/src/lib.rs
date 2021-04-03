@@ -1,5 +1,4 @@
 #![feature(pattern)]
-#![feature(str_split_once)]
 #![feature(try_blocks)]
 
 #[macro_use] extern crate derivative;
@@ -75,7 +74,7 @@ pub trait Store: Send + Sync {
 
   /// Like `read_derivation`, but accepts a path that might not be in the Nix
   /// database yet.
-  fn read_invalid_derivation(&self, path: &StorePath) -> Result<Derivation>;
+  fn try_read_derivation(&self, path: &StorePath) -> Result<Derivation>;
 
   fn make_store_path(&self, path_type: &str, hash: Hash, name: &str) -> Result<StorePath> {
     let ident = format!(
@@ -225,7 +224,7 @@ pub trait Store: Send + Sync {
       }
     }
 
-    let drv = self.read_invalid_derivation(drv_path)?;
+    let drv = self.try_read_derivation(drv_path)?;
     let hash = self.hash_derivation_modulo(&drv, false)?;
 
     derivation::DRV_HASHES
@@ -295,6 +294,8 @@ pub trait Store: Send + Sync {
       .query_path_info(path)?
       .ok_or_else(|| anyhow!("path {} is not valid", self.print_store_path(path)))
   }
+
+  fn log_file_of(&self, path: &StorePath) -> PathBuf;
 }
 
 fn make_type<S: Store + ?Sized>(

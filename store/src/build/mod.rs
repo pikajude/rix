@@ -11,7 +11,19 @@ use std::{
 mod dep_queue;
 mod queue;
 
-#[derive(Debug, Deref)]
+cfg_if::cfg_if! {
+  if #[cfg(target_os = "linux")] {
+    mod linux;
+    use self::linux as sys;
+  } else if #[cfg(target_os = "macos")] {
+    mod macos;
+    use self::macos as sys;
+  } else {
+    compile_error!("Nix builds are not supported on this platform.")
+  }
+}
+
+#[derive(Debug, Deref, Copy, Clone)]
 struct FinishedChild(u32);
 
 #[derive(Debug)]
@@ -23,6 +35,7 @@ enum Message {
     // the pid of a process that should be removed from self.active_pids.
     result: Result<Option<FinishedChild>>,
   },
+  #[allow(dead_code)]
   SpawnedProcess(u32),
 }
 
@@ -184,11 +197,7 @@ impl Worker {
       let setup_failure: Result<()> = try {
         let mut needs_build = false;
         for (name, out) in drv.outputs.iter() {
-          if !store.is_valid_path(
-            &*out
-              .path(&*store, &drv.name, name)?
-              .ok_or_else(|| anyhow!("no path"))?,
-          )? {
+          if !store.is_valid_path(&*out.path(&*store, &drv.name, name)?)? {
             needs_build = true;
             break;
           }
@@ -200,15 +209,10 @@ impl Worker {
             outputs: drv.outputs.keys().cloned().collect(),
             result,
           });
-          return;
         }
       };
 
-      if let Err(e) = setup_failure {
-        result = Err(e);
-      } else {
-        eprintln!("{:?}", drv);
-      }
+      result = setup_failure.and_then(|_| sys::build(&*store, &messages, scope, &path, &drv));
 
       messages.push(Message::Finish {
         job_id: id,

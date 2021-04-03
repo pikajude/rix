@@ -249,7 +249,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
   );
 
   for (name, output) in &drv.outputs {
-    let strval = match output.path(&*eval.store, &drv.name, name)? {
+    let strval = match output.get_path(&*eval.store, &drv.name, name)? {
       Some(p) => eval.store.print_store_path(&p),
       None => todo!("generate downstream placeholder"),
     };

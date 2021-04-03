@@ -1,4 +1,4 @@
-use rix_eval::{vref, Eval};
+use rix_eval::Eval;
 use rix_store::{build::Worker, LocalStore};
 use rix_util::*;
 use std::{path::Path, sync::Arc};
