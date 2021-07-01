@@ -59,7 +59,7 @@ impl Cache {
     let info_json = serde_json::to_string(info)?;
     let path = store.print_store_path(path);
 
-    self.0.lock().execute_named(
+    self.0.lock().execute(
       ADD,
       named_params! {
         ":input": input_json,
@@ -84,7 +84,7 @@ impl Cache {
     let mut stmt = conn.prepare(LOOKUP)?;
 
     let inf = stmt
-      .query_and_then_named::<_, anyhow::Error, _>(named_params! { ":input": in_attrs }, |row| {
+      .query_and_then::<_, anyhow::Error, _, _>(named_params! { ":input": in_attrs }, |row| {
         let info_json = row.get::<_, String>(0)?;
         let store_path = store.parse_store_path(Path::new(&row.get::<_, String>(1)?))?;
         let immutable = row.get::<_, bool>(2)?;

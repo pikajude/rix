@@ -19,10 +19,9 @@ pub struct LocalStore {
 
 impl LocalStore {
   pub fn new() -> Result<Self> {
-    let d = dirs::data_dir().expect("no data dir set");
-    let basedir = d.join("rix");
+    let basedir = PathBuf::from("/rix");
     let storedir = basedir.join("store");
-    let dbdir = basedir.join("db");
+    let dbdir = basedir.join("var/rix/db");
 
     std::fs::create_dir_all(&storedir)?;
     std::fs::create_dir_all(&dbdir)?;

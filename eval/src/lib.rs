@@ -500,6 +500,7 @@ impl Eval {
         s.clone()
       }
       Value::Path(p) => {
+        trace!("canonicalizing {}", p.display());
         let p = p.canonicalize()?;
         if opts.copy_to_store {
           self.copy_path_to_store(pos, &p, context)?

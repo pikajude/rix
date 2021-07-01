@@ -19,9 +19,11 @@ use std::{
 pub mod build;
 pub mod derivation;
 mod local;
+mod lock;
 pub mod path;
 pub mod path_info;
 mod prelude;
+pub mod settings;
 
 pub use derivation::{Derivation, DerivationType, DrvName, HashModulo, Output};
 pub use local::LocalStore;

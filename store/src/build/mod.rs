@@ -147,10 +147,10 @@ impl Worker {
 
   fn handle_error(&self, some_error: &mut Option<anyhow::Error>, error: anyhow::Error) {
     if some_error.is_some() {
-      warn!("{:?}", error);
+      warn!("{:#}", error);
     } else {
       if !self.active.is_empty() {
-        warn!("{:?}", error);
+        warn!("{:#}", error);
         eprintln!("build failed, waiting for others to finish");
       }
       *some_error = Some(error);

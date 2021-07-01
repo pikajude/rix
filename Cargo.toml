@@ -1,3 +1,2 @@
 [workspace]
-
 members = ["build", "eval", "fetch", "rix", "store", "syntax", "util"]

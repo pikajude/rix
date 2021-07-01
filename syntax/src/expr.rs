@@ -270,7 +270,7 @@ impl Attrs {
         ParseBinding::Inherit(items) => {
           for Located { pos, v: item } in items {
             if let AttrName::Static(name) = item {
-              if this.attrs.contains_key(&name) {
+              if this.attrs.iter().any(|(x, _)| x == &name) {
                 return Err(Located {
                   pos,
                   v: UserError::Other(format!("attribute `{}' already defined", name)),

@@ -3,7 +3,7 @@ use parking_lot::Mutex;
 use rusqlite::Connection;
 use slog::{Drain, Level};
 
-#[derive(Deref)] // wrap this later? idk
+#[derive(Deref)]
 pub struct Sqlite(Mutex<Connection>);
 
 impl Sqlite {
