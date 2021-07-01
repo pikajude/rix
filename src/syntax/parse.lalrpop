@@ -1,0 +1,385 @@
+use crate::syntax::UserError;
+use crate::syntax::expr::*;
+use crate::syntax::expr::Bin::*;
+use crate::syntax::lex::Token;
+use crate::syntax::parse::*;
+use codespan::{Span, FileId};
+use path_abs::PathAbs;
+use std::path::Path;
+use std::sync::Arc;
+
+grammar<'input>(
+  base_path: &Path,
+  file_id: FileId
+);
+
+extern {
+  type Location = usize;
+  type Error = Located<UserError>;
+
+  enum Token<'input> {
+    ID => Token::Id(<Ident>),
+    Str => Token::Str(<String>),
+    IndStr => Token::IndStr(<String>),
+    Uri => Token::Uri(<&'input str>),
+    Path => Token::Path(<&'input str>),
+    HPath => Token::HomePath(<&'input str>),
+    NPath => Token::NixPath(<&'input str>),
+    ind_open => Token::IndStringOpen,
+    ind_close => Token::IndStringClose,
+    Int => Token::Int(<i64>),
+    Float => Token::Float(<f64>),
+    "assert" => Token::Assert,
+    "else" => Token::Else,
+    "let" => Token::Let,
+    "if" => Token::If,
+    "in" => Token::In,
+    "inherit" => Token::Inherit,
+    "or" => Token::OrKw,
+    "rec" => Token::Rec,
+    "then" => Token::Then,
+    "with" => Token::With,
+    "..." => Token::Ellipsis,
+    "${" => Token::DollarCurly,
+    "==" => Token::Eq,
+    "!=" => Token::Neq,
+    "++" => Token::Concat,
+    "||" => Token::Or,
+    "&&" => Token::And,
+    "->" => Token::Impl,
+    "<=" => Token::Leq,
+    ">=" => Token::Geq,
+    "//" => Token::Update,
+    "<" => Token::Any('<'),
+    ">" => Token::Any('>'),
+    "!" => Token::Any('!'),
+    ":" => Token::Any(':'),
+    ";" => Token::Any(';'),
+    "{" => Token::Any('{'),
+    "}" => Token::Any('}'),
+    "(" => Token::Any('('),
+    ")" => Token::Any(')'),
+    "[" => Token::Any('['),
+    "]" => Token::Any(']'),
+    "," => Token::Any(','),
+    "?" => Token::Any('?'),
+    "@" => Token::Any('@'),
+    "=" => Token::Any('='),
+    "." => Token::Any('.'),
+    "-" => Token::Any('-'),
+    "+" => Token::Any('+'),
+    "*" => Token::Any('*'),
+    "/" => Token::Any('/'),
+    quote => Token::Any('"')
+  }
+}
+
+pub Expr = expr;
+
+expr = expr_function;
+
+expr_function: Expr = {
+  S<(<ID> ":" <expr_function>)> => Expr::Lambda(Lambda {
+    pos: <>.pos,
+    name: Ident::from("<none>"),
+    arg: LambdaArg::Plain(<>.v.0),
+    body: Arc::new(<>.v.1)
+  }),
+  S<(<formals> ":" <expr_function>)> => Expr::Lambda(Lambda {
+    pos: <>.pos,
+    name: Ident::from("<none>"),
+    arg: LambdaArg::Formals { name: None, formals: <>.v.0 },
+    body: Arc::new(<>.v.1)
+  }),
+  S<(<formals> "@" <ID> ":" <expr_function>)> => Expr::Lambda(Lambda {
+    pos: <>.pos,
+    name: Ident::from("<none>"),
+    arg: LambdaArg::Formals { name: Some(<>.v.1), formals: <>.v.0 },
+    body: Arc::new(<>.v.2)
+  }),
+  S<(<ID> "@" <formals> ":" <expr_function>)> => Expr::Lambda(Lambda {
+    pos: <>.pos,
+    name: Ident::from("<none>"),
+    arg: LambdaArg::Formals { name: Some(<>.v.0), formals: <>.v.1 },
+    body: Arc::new(<>.v.2)
+  }),
+  S<("assert" <expr> ";" <expr_function>)> => Expr::Assert {
+    pos: <>.pos,
+    cond: Arc::new(<>.v.0),
+    body: Arc::new(<>.v.1)
+  },
+  S<("with" <expr> ";" <expr_function>)> => Expr::With {
+    pos: <>.pos,
+    env: Arc::new(<>.v.0),
+    body: Arc::new(<>.v.1),
+  },
+  S<("let" <S<binding>*> "in" <expr_function>)> =>? {
+    let attrs = Attrs::collect(<>.pos, <>.v.0, false)?;
+    Ok(Expr::Let {
+      attrs,
+      body: Arc::new(<>.v.1)
+    })
+  },
+  expr_if
+}
+
+expr_if: Expr = {
+  S<("if" <expr> "then" <expr> "else" <expr>)> => Expr::If {
+    pos: <>.pos,
+    cond: Arc::new(<>.v.0),
+    rhs1: Arc::new(<>.v.1),
+    rhs2: Arc::new(<>.v.2),
+  },
+  expr_op
+}
+
+// ====================== faking operator precedence ===========================
+expr_op = expr_op_14;
+
+expr_op_14: Expr = {
+  S<(<expr_op_14> "->" <expr_op_13>)> => Expr::bin(Impl, <>),
+  expr_op_13
+}
+
+expr_op_13: Expr = {
+  S<(<expr_op_13> "||" <expr_op_12>)> => Expr::bin(Or, <>),
+  expr_op_12
+}
+
+expr_op_12: Expr = {
+  S<(<expr_op_12> "&&" <expr_op_11>)> => Expr::bin(And, <>),
+  expr_op_11
+}
+
+expr_op_11: Expr = {
+  S<(<expr_op_11> "==" <expr_op_10>)> => Expr::bin(Eq, <>),
+  S<(<expr_op_11> "!=" <expr_op_10>)> => Expr::bin(Neq, <>),
+  expr_op_10
+}
+
+expr_op_10: Expr = {
+  S<(<expr_op_10> "<" <expr_op_9>)> => Expr::lt(<>, false),
+  S<(<expr_op_10> "<=" <expr_op_9>)> => Expr::lt(swap(<>), true),
+  S<(<expr_op_10> ">" <expr_op_9>)> => Expr::lt(swap(<>), false),
+  S<(<expr_op_10> ">=" <expr_op_9>)> => Expr::lt(<>, true),
+  expr_op_9
+}
+
+expr_op_9: Expr = {
+  S<(<expr_op_8> "//" <expr_op_9>)> => Expr::bin(Update, <>),
+  expr_op_8
+}
+
+expr_op_8: Expr = {
+  S<("!" <expr_op_8>)> => Expr::Not {
+    pos: <>.pos,
+    e: Arc::new(<>.v),
+  },
+  expr_op_7
+}
+
+expr_op_7: Expr = {
+  S<(<expr_op_7> "+" <expr_op_6>)> => Expr::ConcatStrings {
+    pos: <>.pos,
+    force_string: false,
+    parts: vec![<>.v.0, <>.v.1]
+  },
+  S<(<expr_op_7> "-" <expr_op_6>)> => Expr::app2("__sub", <>),
+  expr_op_6
+}
+
+expr_op_6: Expr = {
+  S<(<expr_op_6> "*" <expr_op_5>)> => Expr::app2("__mul", <>),
+  S<(<expr_op_6> "/" <expr_op_5>)> => Expr::app2("__div", <>),
+  expr_op_5
+}
+
+expr_op_5: Expr = {
+  S<(<expr_op_4> "++" <expr_op_5>)> => Expr::bin(ConcatLists, <>),
+  expr_op_4
+}
+
+expr_op_4: Expr = {
+  <lhs:expr_op_4> "?" <path:attrpath> => Expr::HasAttr { lhs: Arc::new(lhs), path },
+  expr_op_3
+}
+
+expr_op_3: Expr = {
+  S<("-" <expr_op_3>)> => {
+    Expr::apply(Located {
+      pos: <>.pos,
+      v: (
+        Expr::apply(Located {
+          pos: <>.pos,
+          v: (
+            Expr::Var { pos: <>.pos, name: "__sub".into() },
+            Expr::Int { n: 0 },
+          )
+        }),
+        <>.v
+      )
+    })
+  },
+  expr_app
+}
+
+// ====================== all done =============================================
+
+expr_app: Expr = {
+  S<(expr_app expr_select)> => Expr::apply(<>),
+  expr_select
+}
+
+expr_select: Expr = {
+  S<(<expr_simple> "." <attrpath>)> => Expr::Select {
+    pos: <>.pos,
+    lhs: Arc::new(<>.v.0),
+    path: <>.v.1,
+    def: None,
+  },
+  S<(<expr_simple> "." <attrpath> "or" <expr_select>)> => Expr::Select {
+    pos: <>.pos,
+    lhs: Arc::new(<>.v.0),
+    path: <>.v.1,
+    def: Some(Arc::new(<>.v.2)),
+  },
+  S<(expr_simple S<"or">)> => Expr::apply(Located {
+    pos: <>.pos,
+    v: (<>.v.0, Expr::Var { pos: <>.v.1.pos, name: Ident::from("or") })
+  }),
+  expr_simple
+}
+
+expr_simple: Expr = {
+  S<ID> => if <>.v.as_ref() == "__curPos" {
+    Expr::Pos { pos: <>.pos }
+  } else {
+    Expr::Var { pos: <>.pos, name: Ident::from(<>.v) }
+  },
+
+  <n:Int> => Expr::Int { n },
+  <f:Float> => Expr::Float { f },
+
+  quote <string_parts> quote,
+  ind_open <ind_string_parts> ind_close,
+
+  S<Path> =>? Ok(Expr::path(
+    PathAbs::new(base_path.join(<>.v))
+      .map_err(|p| Located { pos: <>.pos, v: UserError::PathResolution(p) })?
+      .as_path()
+      .to_path_buf()
+  )),
+  HPath => Expr::path(homedir().join(<>.strip_prefix("~/").unwrap())),
+  S<NPath> => {
+    let real_path = <>.v.strip_prefix("<").unwrap().strip_suffix(">").unwrap();
+    Expr::apply(Located {
+      pos: <>.pos,
+      v: (
+        Expr::apply(Located {
+          pos: <>.pos,
+          v: (
+            Expr::Var { pos: <>.pos, name: "__findFile".into() },
+            Expr::Var { pos: <>.pos, name: "__nixPath".into() }
+          )
+        }),
+        Expr::string(real_path)
+      )
+    })
+  },
+  Uri => Expr::string(<>),
+
+  "(" <expr> ")",
+
+  "let" <S<("{" <S<binding>*> "}")>> =>? {
+    let mut attrs = Attrs::collect(<>.pos, <>.v, true)?;
+    attrs.recursive = true;
+    Ok(Expr::Select {
+      pos: <>.pos,
+      lhs: Arc::new(Expr::Attrs(attrs)),
+      def: None,
+      path: vec![Located { pos: <>.pos, v: AttrName::Static(Ident::from("body")) }]
+    })
+  },
+  "rec" <S<("{" <S<binding>*> "}")>> =>? {
+    let mut attrs = Attrs::collect(<>.pos, <>.v, true)?;
+    attrs.recursive = true;
+    Ok(Expr::Attrs(attrs))
+  },
+  S<("{" <S<binding>*> "}")> =>? Ok(Expr::Attrs(Attrs::collect(<>.pos, <>.v, true)?)),
+
+  "[" <expr_select*> "]" => Expr::List(<>.into_iter().map(Arc::new).collect())
+}
+
+ind_string_parts: Expr = {
+  S<ind_string_part*> => unindent(<>.pos, <>.v)
+}
+
+ind_string_part: Expr = {
+  <s:IndStr> => Expr::string(s),
+  "${" <expr> "}",
+}
+
+string_parts: Expr = {
+  S<string_part*> => if <>.v.is_empty() {
+    Expr::string("")
+  } else if <>.v.len() == 1 {
+    let mut x = <>.v;
+    x.pop().unwrap()
+  } else {
+    Expr::ConcatStrings { pos: <>.pos, force_string: true, parts: <>.v }
+  }
+}
+
+string_part: Expr = {
+  <s:Str> => Expr::string(s),
+  "${" <expr> "}",
+}
+
+attrpath: AttrPath = {
+  <p1:attr> <path:("." <attr>)*> => {
+    let mut v = vec![p1];
+    v.extend(path);
+    v
+  }
+}
+
+attr: Located<AttrName> = {
+  S<ID> => <>.map(|v|AttrName::Static(v)),
+  S<"or"> => <>.map(|_|AttrName::Static(Ident::from("or"))),
+  S<(quote <string_parts> quote)> => <>.map(|v|AttrName::Dynamic(Arc::new(v))),
+  S<("${" <expr> "}")> => <>.map(|v|AttrName::Dynamic(Arc::new(v)))
+}
+
+formals: Formals = {
+  "{" <f1:formal> <fs:("," <formal>)*> <ell:("," <"..."?>)?> "}" => {
+    let mut formals = vec![f1];
+    formals.extend(fs);
+    Formals {
+      formals,
+      ellipsis: ell.flatten().is_some()
+    }
+  },
+  "{" <ell:"..."?> "}" => Formals {
+    formals: vec![],
+    ellipsis: ell.is_some()
+  }
+}
+
+formal: Formal = {
+  S<ID> => Formal { pos: <>.pos, name: <>.v, def: None },
+  S<(<ID> "?" <expr>)> => Formal { pos: <>.pos, name: <>.v.0, def: Some(Arc::new(<>.v.1)) }
+}
+
+binding: ParseBinding = {
+  <attrpath> "=" <expr> ";" => ParseBinding::Plain(<>),
+  "inherit" <attr*> ";" => ParseBinding::Inherit(<>),
+  "inherit" "(" <expr> ")" <attr*> ";" => ParseBinding::InheritFrom(<>)
+}
+
+#[inline]
+S<T>: Located<T> = {
+  <start:@L> <item:T> <end:@R> => Located {
+    pos: Pos(file_id, Span::new(start as u32, end as u32)),
+    v: item,
+  }
+}
