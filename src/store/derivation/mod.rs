@@ -18,9 +18,9 @@ lazy_static! {
 
 #[derive(Debug, Eq, PartialEq, Clone, EnumAsInner)]
 pub enum HashModulo {
-  Normal(Hash),
+  Known(Hash),
   FixedOutput(HashMap<String, Hash>),
-  Unknown,
+  Deferred(Hash),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -85,7 +85,7 @@ impl Output {
   }
 }
 
-fn output_path_name(drv_name: impl AsRef<str>, output_name: impl AsRef<str>) -> String {
+pub fn output_path_name(drv_name: impl AsRef<str>, output_name: impl AsRef<str>) -> String {
   let drv_name = drv_name.as_ref();
   let output_name = output_name.as_ref();
   if output_name == "out" {

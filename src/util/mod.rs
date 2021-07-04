@@ -34,6 +34,16 @@ lazy_static! {
   pub static ref FILES: Mutex<Files<String>> = Default::default();
 }
 
+impl FILES {
+  #[allow(dead_code)]
+  pub(crate) fn dump_pos(p: Pos) -> Result<()> {
+    let f = FILES.lock();
+    let contents = f.source_slice(p.0, p.1)?;
+    debug!("dump_pos: {}", contents);
+    Ok(())
+  }
+}
+
 pub type Ident = string_cache::DefaultAtom;
 
 pub fn show_diagnostic(diag: &Diagnostic<FileId>) -> Result<()> {

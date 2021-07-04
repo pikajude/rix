@@ -23,7 +23,8 @@ struct CompareValues<'a>(Cow<'a, Value>);
 
 impl PartialEq for CompareValues<'_> {
   fn eq(&self, other: &Self) -> bool {
-    if let Some(result) = super::numbers(&*self.0, &*other.0, |i1, i2| i1 == i2, |f1, f2| f1 == f2)
+    if let Some(result) =
+      super::numeric_op(&*self.0, &*other.0, |i1, i2| i1 == i2, |f1, f2| f1 == f2)
     {
       result
     } else {
@@ -40,7 +41,7 @@ impl Eq for CompareValues<'_> {}
 
 impl PartialOrd for CompareValues<'_> {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    if let Some(result) = numbers(
+    if let Some(result) = numeric_op(
       &self.0,
       &other.0,
       |i1, i2| i1.partial_cmp(&i2),
@@ -141,7 +142,7 @@ impl Init {
         )),
         vref(Value::Path(PathBuf::from(concat!(
           env!("CARGO_MANIFEST_DIR"),
-          "/corepkgs/derivation.nix"
+          "/src/eval/corepkgs/derivation.nix"
         )))),
       ),
     );
@@ -178,6 +179,7 @@ impl Init {
     self.add_primop("__hasAttr", 2, prim_has_attr);
     self.add_primop("__intersectAttrs", 2, prim_intersect_attrs);
     self.add_primop("__listToAttrs", 1, prim_list_to_attrs);
+    self.add_primop("__mapAttrs", 2, prim_map_attrs);
     self.add_primop("removeAttrs", 2, prim_remove_attrs);
     self.add_primop("__unsafeGetAttrPos", 2, prim_get_attr_pos);
 
@@ -412,6 +414,23 @@ fn prim_map(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::List(Arc::new(new_items)))
 }
 
+fn prim_map_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrs = eval.force_attrs(pos, &args[1])?;
+  let mut new_attrs = Attrs::new();
+  for (k, v) in attrs.iter() {
+    let name_arg = Value::string(k.to_string());
+    let app1 = Value::Apply(args[0].clone(), vref(name_arg));
+    new_attrs.insert(
+      k.clone(),
+      Located {
+        pos,
+        v: vref(Value::Apply(vref(app1), v.v.clone())),
+      },
+    );
+  }
+  Ok(Value::Attrs(Arc::new(new_attrs)))
+}
+
 fn prim_attrnames(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let attrs = eval.force_attrs(pos, &args[0])?;
   let mut keys = Vec::with_capacity(attrs.len());
@@ -593,7 +612,7 @@ fn prim_add_error_context(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Val
 fn prim_subtract(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let v1 = eval.force(pos, &args[0])?;
   let v2 = eval.force(pos, &args[1])?;
-  numbers(
+  numeric_op(
     &*v1,
     &*v2,
     |i1, i2| Value::Int(i1 - i2),
@@ -1100,7 +1119,7 @@ fn json_to_value(eval: &Eval, pos: Pos, value: JSON) -> Result<Value> {
 fn mk_nix_path() -> Value {
   let mut entries = vec![];
   for entry in get_nix_path().into_iter().chain(std::iter::once(format!(
-    "nix={}/corepkgs",
+    "nix={}/src/eval/corepkgs",
     env!("CARGO_MANIFEST_DIR")
   ))) {
     let mut parts = entry.splitn(2, '=');

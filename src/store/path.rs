@@ -56,6 +56,10 @@ impl Path {
       .strip_suffix(".drv")
       .ok_or_else(|| anyhow!("store path does not refer to a derivation"))
   }
+
+  pub fn name(&self) -> &Name {
+    &self.name
+  }
 }
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]

@@ -155,6 +155,7 @@ pub trait Store: Send + Sync {
     derivation: &Derivation,
     mask_outputs: bool,
   ) -> Result<HashModulo> {
+    let mut deferred = false;
     match derivation.ty {
       DerivationType::Fixed => {
         let mut output_hashes = HashMap::new();
@@ -175,18 +176,21 @@ pub trait Store: Send + Sync {
         }
         return Ok(HashModulo::FixedOutput(output_hashes));
       }
-      DerivationType::Floating => return Ok(HashModulo::Unknown),
+      DerivationType::Floating => {
+        deferred = true;
+      }
       _ => {}
     }
 
     let mut inputs2 = BTreeMap::new();
     for (path, outputs) in derivation.input_derivations.iter() {
       match self.path_derivation_modulo(path)? {
-        HashModulo::Normal(h) => {
+        HashModulo::Known(h) => {
           inputs2.insert(h.encode(Encoding::Base16), outputs.clone());
         }
-        HashModulo::Unknown => {
-          return Ok(HashModulo::Unknown);
+        HashModulo::Deferred(h) => {
+          deferred = true;
+          inputs2.insert(h.encode(Encoding::Base16), outputs.clone());
         }
         HashModulo::FixedOutput(hashes) => {
           for out in outputs {
@@ -202,12 +206,18 @@ pub trait Store: Send + Sync {
       }
     }
 
-    Ok(HashModulo::Normal(Hash::hash(
+    let inner = Hash::hash(
       derivation
         .print(self, mask_outputs, Some(inputs2))
         .to_string(),
       HashType::SHA256,
-    )))
+    );
+
+    if deferred {
+      Ok(HashModulo::Deferred(inner))
+    } else {
+      Ok(HashModulo::Known(inner))
+    }
   }
 
   fn path_derivation_modulo(&self, drv_path: &StorePath) -> Result<HashModulo> {

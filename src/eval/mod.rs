@@ -570,7 +570,7 @@ impl Eval {
     let v1 = self.force(pos, v1)?;
     let v2 = self.force(pos, v2)?;
 
-    if let Some(result) = numbers(
+    if let Some(result) = numeric_op(
       &*v1,
       &*v2,
       |i1, i2| i1 == i2,
@@ -845,7 +845,9 @@ impl Eval {
   }
 }
 
-fn numbers<T, F: Fn(i64, i64) -> T, G: Fn(f64, f64) -> T>(
+/// Try to apply a numeric operator to two values. If one value is `f64`, the
+/// other is also cast to `f64`. If either value is not numeric, return `None`.
+fn numeric_op<T, F: Fn(i64, i64) -> T, G: Fn(f64, f64) -> T>(
   v1: &Value,
   v2: &Value,
   ifun: F,
@@ -944,6 +946,15 @@ mod tests {
     e.assert("let x = { f = _: 1; }; in x != x // { inherit (x) f; }")?;
     e.assert("let x = { f = _: 1; }; in x == { inherit (x) f; } // x")?;
     e.assert(r#"let x = { f = _: 1; }; in x == builtins.removeAttrs (x // { g = 1; }) ["g"]"#)?;
+
+    ok()
+  }
+
+  #[test]
+  fn test_map_attrs() -> NixResult {
+    let e = Eval::test();
+
+    e.assert("builtins.mapAttrs (x: y: y + 10) { x = 1; y = 2; } == { x = 11; y = 12; }")?;
 
     ok()
   }

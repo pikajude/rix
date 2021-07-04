@@ -213,7 +213,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
     }
 
     match eval.store.hash_derivation_modulo(&drv, true)? {
-      HashModulo::Normal(h) => {
+      HashModulo::Known(h) => {
         for outname in outputs {
           let path = eval.store.make_output_path(&outname, h, &drv_name)?;
           drv
@@ -222,8 +222,10 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
           drv.outputs.insert(outname, Output::InputAddressed(path));
         }
       }
-      HashModulo::FixedOutput(_) => unreachable!(),
-      HashModulo::Unknown => {
+      HashModulo::FixedOutput(_) => {
+        unreachable!("the top-level derivation is not content-addressed")
+      }
+      HashModulo::Deferred(_) => {
         for outname in outputs {
           drv.outputs.insert(outname, Output::Deferred);
         }
