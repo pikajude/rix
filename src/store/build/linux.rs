@@ -1,18 +1,17 @@
-use core::slice;
-use std::backtrace::Backtrace;
 use std::fs::{self, remove_dir, File};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::symlink;
-use std::os::unix::prelude::{AsRawFd, CommandExt, RawFd};
+use std::os::unix::prelude::{AsRawFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::slice;
 
+use super::*;
 use crate::store::derivation::output_path_name;
 use crate::store::lock::{UserLock, UserLocker};
 use crate::store::settings::{settings, SandboxMode};
 use crate::store::StorePathSet;
 
-use super::*;
 use anyhow::Error;
 use crossbeam::thread::Scope;
 use libc::SIGCHLD;
@@ -24,12 +23,12 @@ use nix::pty::{posix_openpt, ptsname, unlockpt};
 use nix::sched::{clone, unshare, CloneFlags};
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
-use nix::sys::stat::{fchmodat, stat, FchmodatFlags, Mode, SFlag};
+use nix::sys::stat::{fchmodat, stat, FchmodatFlags, Mode};
 use nix::sys::termios::{cfmakeraw, tcgetattr, tcsetattr, SetArg};
 use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::*;
 use nix::NixPath;
-use rlimit::{setrlimit, Resource};
+use rlimit::Resource;
 
 const SANDBOX_UID: libc::uid_t = 1000;
 const SANDBOX_GID: libc::uid_t = 100;

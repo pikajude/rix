@@ -1,5 +1,3 @@
-use nix::sys::wait::waitpid;
-use nix::unistd::{fork, ForkResult};
 use rix::eval::Eval;
 use rix::store::build::Worker;
 use rix::store::LocalStore;
