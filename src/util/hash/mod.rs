@@ -1,13 +1,11 @@
 use super::*;
 use crypto::digest::Digest;
-use std::{
-  fmt::{self, Debug},
-  fs::File,
-  hash,
-  ops::Deref,
-  path::Path,
-  str::FromStr,
-};
+use std::fmt::{self, Debug};
+use std::fs::File;
+use std::hash;
+use std::ops::Deref;
+use std::path::Path;
+use std::str::FromStr;
 
 mod context;
 mod sink;

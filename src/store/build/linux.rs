@@ -1,44 +1,34 @@
 use core::slice;
-use std::{
-  backtrace::Backtrace,
-  fs::{self, remove_dir, File},
-  io::{BufRead, BufReader, Write},
-  os::unix::{
-    fs::symlink,
-    prelude::{AsRawFd, CommandExt, RawFd},
-  },
-  path::{Path, PathBuf},
-  process::Command,
-};
+use std::backtrace::Backtrace;
+use std::fs::{self, remove_dir, File};
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::fs::symlink;
+use std::os::unix::prelude::{AsRawFd, CommandExt, RawFd};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use crate::store::{
-  derivation::output_path_name,
-  lock::{UserLock, UserLocker},
-  settings::{settings, SandboxMode},
-  StorePathSet,
-};
+use crate::store::derivation::output_path_name;
+use crate::store::lock::{UserLock, UserLocker};
+use crate::store::settings::{settings, SandboxMode};
+use crate::store::StorePathSet;
 
 use super::*;
 use anyhow::Error;
 use crossbeam::thread::Scope;
 use libc::SIGCHLD;
 use linux_personality::{personality, ADDR_NO_RANDOMIZE};
-use nix::{
-  errno::Errno,
-  fcntl::{open, OFlag},
-  mount::{mount, umount2, MntFlags, MsFlags},
-  pty::{posix_openpt, ptsname, unlockpt},
-  sched::{clone, unshare, CloneFlags},
-  sys::{
-    mman::{mmap, MapFlags, ProtFlags},
-    socket::{socket, AddressFamily, SockFlag, SockType},
-    stat::{fchmodat, stat, FchmodatFlags, Mode, SFlag},
-    termios::{cfmakeraw, tcgetattr, tcsetattr, SetArg},
-    wait::{waitpid, WaitStatus},
-  },
-  unistd::*,
-  NixPath,
-};
+use nix::errno::Errno;
+use nix::fcntl::{open, OFlag};
+use nix::mount::{mount, umount2, MntFlags, MsFlags};
+use nix::pty::{posix_openpt, ptsname, unlockpt};
+use nix::sched::{clone, unshare, CloneFlags};
+use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
+use nix::sys::stat::{fchmodat, stat, FchmodatFlags, Mode, SFlag};
+use nix::sys::termios::{cfmakeraw, tcgetattr, tcsetattr, SetArg};
+use nix::sys::wait::{waitpid, WaitStatus};
+use nix::unistd::*;
+use nix::NixPath;
 use rlimit::{setrlimit, Resource};
 
 const SANDBOX_UID: libc::uid_t = 1000;

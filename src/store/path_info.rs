@@ -1,6 +1,7 @@
 use std::time::SystemTime;
 
-use super::{prelude::*, StorePathSet};
+use super::prelude::*;
+use super::StorePathSet;
 
 #[derive(Derivative)]
 #[derivative(Debug)]

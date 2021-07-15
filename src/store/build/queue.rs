@@ -1,8 +1,6 @@
-use std::{
-  collections::VecDeque,
-  sync::{Condvar, Mutex},
-  time::Duration,
-};
+use std::collections::VecDeque;
+use std::sync::{Condvar, Mutex};
+use std::time::Duration;
 
 #[derive(Debug)]
 pub struct Queue<T> {

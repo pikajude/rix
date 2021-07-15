@@ -1,10 +1,9 @@
 use super::*;
-use nix::{fcntl::OFlag, unistd};
-use std::{
-  fs::File,
-  io,
-  os::unix::prelude::{FromRawFd, RawFd},
-};
+use nix::fcntl::OFlag;
+use nix::unistd;
+use std::fs::File;
+use std::io;
+use std::os::unix::prelude::{FromRawFd, RawFd};
 
 pub struct PRead {
   fd: RawFd,

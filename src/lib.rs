@@ -10,13 +10,20 @@
 #![feature(option_zip)]
 #![feature(map_first_last)]
 
-#[macro_use] extern crate derivative;
-#[macro_use] extern crate derive_more;
-#[macro_use] extern crate enum_as_inner;
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate serde;
-#[macro_use] extern crate thiserror;
-#[macro_use] extern crate slog_scope;
+#[macro_use]
+extern crate derivative;
+#[macro_use]
+extern crate derive_more;
+#[macro_use]
+extern crate enum_as_inner;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
+extern crate serde;
+#[macro_use]
+extern crate thiserror;
+#[macro_use]
+extern crate slog_scope;
 
 pub mod eval;
 pub mod fetch;

@@ -1,20 +1,13 @@
-use crate::{
-  err,
-  store::{FileIngestionMethod, Repair, Store},
-  syntax::{
-    expr::{AttrName, Bin, Lambda, LambdaArg},
-    Expr,
-  },
-  throw,
-  util::*,
-};
+use crate::store::{FileIngestionMethod, Repair, Store};
+use crate::syntax::expr::{AttrName, Bin, Lambda, LambdaArg};
+use crate::syntax::Expr;
+use crate::util::*;
+use crate::{err, throw};
 use error::*;
 use parking_lot::*;
-use std::{
-  collections::HashMap,
-  path::{Path, PathBuf},
-  sync::Arc,
-};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use value::*;
 
 mod builtins;

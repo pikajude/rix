@@ -2,11 +2,9 @@ use crate::store::prelude::*;
 use crossbeam::thread::Scope;
 use dep_queue::DependencyQueue;
 use queue::Queue;
-use std::{
-  collections::{BTreeSet, HashMap, HashSet},
-  sync::Arc,
-  time::Duration,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::sync::Arc;
+use std::time::Duration;
 
 mod dep_queue;
 mod queue;
@@ -19,7 +17,7 @@ cfg_if::cfg_if! {
     mod macos;
     use self::macos as sys;
   } else {
-    compile_error!("Nix builds are not supported on this platform.")
+    compile_error!("Nix builds are not supported on this platform.");
   }
 }
 

@@ -1,6 +1,9 @@
-#[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
-#[doc(no_inline)] pub use codespan::{FileId, Files, Span};
-#[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+#[doc(no_inline)]
+pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
+#[doc(no_inline)]
+pub use codespan::{FileId, Files, Span};
+#[doc(no_inline)]
+pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 pub use cons_list::*;
 use error::Catchable;
@@ -11,13 +14,11 @@ use parking_lot::Mutex;
 pub use pos::*;
 pub use rusqlite::{named_params, params, OptionalExtension as _};
 pub use sqlite::Sqlite;
-use std::{
-  fmt::{self, Debug, Display, Formatter},
-  ops::Try,
-  path::Path,
-  process::Termination,
-  str::pattern::{Pattern, Searcher},
-};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::ops::Try;
+use std::path::Path;
+use std::process::Termination;
+use std::str::pattern::{Pattern, Searcher};
 
 pub mod base32;
 mod cons_list;

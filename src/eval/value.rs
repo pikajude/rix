@@ -1,13 +1,12 @@
 use super::Eval;
-use crate::{syntax::expr::*, util::*};
+use crate::syntax::expr::*;
+use crate::util::*;
 use parking_lot::RwLock;
 use smallvec::SmallVec;
-use std::{
-  collections::{BTreeMap, BTreeSet},
-  fmt::{self, Debug, Formatter},
-  path::PathBuf,
-  sync::Arc,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Debug, Formatter};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 pub type ValueRef = Arc<RwLock<Value>>;
 pub type PathSet = BTreeSet<String>;

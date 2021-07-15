@@ -1,8 +1,6 @@
-use std::{
-  fmt::{self, Debug, Formatter},
-  iter::FusedIterator,
-  sync::Arc,
-};
+use std::fmt::{self, Debug, Formatter};
+use std::iter::FusedIterator;
+use std::sync::Arc;
 
 struct Node<T> {
   elem: T,

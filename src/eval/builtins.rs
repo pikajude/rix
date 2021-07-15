@@ -3,12 +3,10 @@ use crate::store::DrvName;
 use crossbeam::atomic::AtomicCell;
 use regex::Regex;
 use serde_json::{Serializer, Value as JSON};
-use std::{
-  borrow::Cow,
-  cmp::Ordering,
-  collections::{BTreeSet, HashMap},
-  convert::TryInto,
-};
+use std::borrow::Cow;
+use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashMap};
+use std::convert::TryInto;
 
 // FIXME: upstream nix throws an exception in the CompareValues comparator if
 // the two items are incomparable. PartialOrd doesn't give us any way to do the

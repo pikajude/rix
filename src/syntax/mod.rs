@@ -4,11 +4,9 @@ use codespan::FileId;
 pub use expr::Expr;
 use lalrpop_util::ParseError;
 use lex::Lexer;
-use std::{
-  fs,
-  path::{Path, PathBuf},
-  sync::atomic::{AtomicUsize, Ordering},
-};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod expr;
 pub mod lex;

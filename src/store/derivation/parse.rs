@@ -1,5 +1,9 @@
-use crate::store::{prelude::*, HashType};
-use std::{collections::BTreeSet, fmt::Display, path::Path, str::pattern::Pattern};
+use crate::store::prelude::*;
+use crate::store::HashType;
+use std::collections::BTreeSet;
+use std::fmt::Display;
+use std::path::Path;
+use std::str::pattern::Pattern;
 
 use super::FixedOutputHash;
 

@@ -1,8 +1,6 @@
 use once_cell::sync::OnceCell;
-use std::{
-  collections::HashSet,
-  path::{Path, PathBuf},
-};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum SandboxMode {

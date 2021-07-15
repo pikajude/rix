@@ -1,17 +1,11 @@
 use super::*;
-use nix::{
-  fcntl,
-  libc::{S_IXGRP, S_IXOTH, S_IXUSR},
-};
-use std::{
-  collections::BTreeMap,
-  fs::{self, File},
-  io::{self, Read, Write},
-  os::unix::{
-    fs::{symlink, MetadataExt, PermissionsExt},
-    io::AsRawFd,
-  },
-};
+use nix::fcntl;
+use nix::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use std::collections::BTreeMap;
+use std::fs::{self, File};
+use std::io::{self, Read, Write};
+use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+use std::os::unix::io::AsRawFd;
 
 const VERSION_MAGIC: &str = "nix-archive-1";
 

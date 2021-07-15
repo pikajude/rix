@@ -1,9 +1,7 @@
 use super::*;
 use crossbeam::atomic::AtomicCell;
-use serde::{
-  de::{Deserialize, Error, SeqAccess, Visitor},
-  ser::{Serialize, SerializeSeq},
-};
+use serde::de::{Deserialize, Error, SeqAccess, Visitor};
+use serde::ser::{Serialize, SerializeSeq};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Located<T> {

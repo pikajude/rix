@@ -1,8 +1,6 @@
-pub use super::{
-  derivation::{Derivation, DerivationType, HashModulo, Output},
-  path::{Hash as StorePathHash, Path as StorePath},
-  Store,
-};
+pub use super::derivation::{Derivation, DerivationType, HashModulo, Output};
+pub use super::path::{Hash as StorePathHash, Path as StorePath};
+pub use super::Store;
 pub use crate::util::*;
 pub use anyhow::{Context as _, Result};
 

@@ -1,13 +1,11 @@
-use nix::{
-  sys::wait::waitpid,
-  unistd::{fork, ForkResult},
-};
-use rix::{
-  eval::Eval,
-  store::{build::Worker, LocalStore},
-  util::*,
-};
-use std::{path::Path, sync::Arc};
+use nix::sys::wait::waitpid;
+use nix::unistd::{fork, ForkResult};
+use rix::eval::Eval;
+use rix::store::build::Worker;
+use rix::store::LocalStore;
+use rix::util::*;
+use std::path::Path;
+use std::sync::Arc;
 
 fn main() -> NixResult {
   logger::init()?;

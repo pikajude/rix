@@ -1,14 +1,10 @@
 use super::*;
-use nix::{
-  fcntl::{flock, FlockArg},
-  unistd::getpid,
-};
+use nix::fcntl::{flock, FlockArg};
+use nix::unistd::getpid;
 use slog_scope::*;
-use std::{
-  fs::{File, OpenOptions},
-  os::unix::prelude::AsRawFd,
-  time::{Duration, SystemTime},
-};
+use std::fs::{File, OpenOptions};
+use std::os::unix::prelude::AsRawFd;
+use std::time::{Duration, SystemTime};
 
 const QUERY_PATH_INFO: &str = "select id, hash, registrationTime, deriver, narSize, ultimate, \
                                sigs, ca from ValidPaths where path = ?";

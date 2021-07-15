@@ -1,11 +1,9 @@
 use crate::util::*;
 use anyhow::Result;
 pub use prelude::StorePath;
-use std::{
-  collections::{BTreeMap, BTreeSet, HashMap},
-  io::Read,
-  path::{Path, PathBuf},
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 pub mod build;
 pub mod derivation;

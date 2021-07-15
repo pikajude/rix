@@ -1,12 +1,11 @@
-use super::{prelude::*, FileIngestionMethod, HashType};
+use super::prelude::*;
+use super::{FileIngestionMethod, HashType};
 pub use name::Name as DrvName;
 use parking_lot::Mutex;
 pub use print::Print;
-use std::{
-  borrow::Cow,
-  collections::{BTreeMap, BTreeSet, HashMap},
-  path::PathBuf,
-};
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::PathBuf;
 
 mod name;
 mod parse;

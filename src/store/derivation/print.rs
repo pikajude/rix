@@ -1,8 +1,6 @@
 use crate::store::prelude::*;
-use std::{
-  collections::{BTreeMap, BTreeSet},
-  fmt::{self, Display},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Display};
 
 impl Derivation {
   pub fn print<'drv, S: Store + ?Sized>(

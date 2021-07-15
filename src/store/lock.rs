@@ -1,19 +1,15 @@
-use std::{
-  fs::File,
-  os::unix::{io::AsRawFd, prelude::RawFd},
-  path::Path,
-};
+use std::fs::File;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::prelude::RawFd;
+use std::path::Path;
 
-use nix::{
-  errno::{Errno, EWOULDBLOCK},
-  fcntl::{flock, FlockArg},
-  sys::{
-    signal::{kill, Signal},
-    wait::{waitpid, WaitStatus},
-  },
-  unistd::{fork, setuid, ForkResult, Gid, Pid, Uid},
-};
-use users::{os::unix::GroupExt, User};
+use nix::errno::{Errno, EWOULDBLOCK};
+use nix::fcntl::{flock, FlockArg};
+use nix::sys::signal::{kill, Signal};
+use nix::sys::wait::{waitpid, WaitStatus};
+use nix::unistd::{fork, setuid, ForkResult, Gid, Pid, Uid};
+use users::os::unix::GroupExt;
+use users::User;
 
 use super::prelude::*;
 

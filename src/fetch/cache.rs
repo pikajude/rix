@@ -1,10 +1,10 @@
-use crate::{
-  store::{Store, StorePath},
-  util::*,
-};
+use crate::store::{Store, StorePath};
+use crate::util::*;
 use once_cell::sync::OnceCell;
-use serde::{de::DeserializeOwned, Serialize};
-use std::{path::Path, time::SystemTime};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::path::Path;
+use std::time::SystemTime;
 
 static CACHE: OnceCell<Cache> = OnceCell::new();
 

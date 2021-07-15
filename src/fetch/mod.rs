@@ -1,18 +1,18 @@
 mod archive;
 mod cache;
 
-use crate::{
-  store::{FileIngestionMethod, Repair, Store, StorePath, ValidPathInfo},
-  util::*,
-};
+use crate::store::{FileIngestionMethod, Repair, Store, StorePath, ValidPathInfo};
+use crate::util::*;
 use cache::Cache;
 use curl::easy::{Easy, HttpVersion, WriteError};
 use serde_json::{Map, Value};
 use slog::{Drain, Level};
-use std::{
-  collections::HashMap, fs::File, io::Write, os::unix::fs::MetadataExt, path::PathBuf,
-  time::Duration,
-};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
+use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
+use std::time::Duration;
 
 type CacheItem = cache::CacheItem<Map<String, Value>>;
 

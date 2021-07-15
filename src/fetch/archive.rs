@@ -1,7 +1,9 @@
 use anyhow::*;
 use libarchive3_sys::ffi;
 use nix::NixPath;
-use std::{ffi::CStr, mem::MaybeUninit, path::Path};
+use std::ffi::CStr;
+use std::mem::MaybeUninit;
+use std::path::Path;
 
 pub fn unpack<P: AsRef<Path>, P1: AsRef<Path>>(path: P, dest: P1) -> Result<()> {
   let path = path.as_ref();

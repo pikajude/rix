@@ -1,11 +1,9 @@
 use super::prelude::*;
-use std::{
-  cmp::Ordering,
-  convert::TryInto,
-  fmt::{self, Debug, Display},
-  ops::Deref,
-  str::FromStr,
-};
+use std::cmp::Ordering;
+use std::convert::TryInto;
+use std::fmt::{self, Debug, Display};
+use std::ops::Deref;
+use std::str::FromStr;
 
 const HASH_BYTES: usize = 20;
 const HASH_CHARS: usize = 32;

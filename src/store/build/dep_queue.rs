@@ -1,7 +1,5 @@
-use std::{
-  collections::{HashMap, HashSet},
-  hash::Hash,
-};
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 
 #[derive(Debug)]
 pub struct DependencyQueue<N: Hash + Eq, E: Hash + Eq, V> {

@@ -1,8 +1,6 @@
 use super::*;
-use crate::store::{
-  derivation::{FixedOutputHash, HashModulo, Output},
-  Derivation, FileIngestionMethod, Repair,
-};
+use crate::store::derivation::{FixedOutputHash, HashModulo, Output};
+use crate::store::{Derivation, FileIngestionMethod, Repair};
 use std::collections::BTreeSet;
 
 fn decode_context(s: &str) -> (&str, &str) {
