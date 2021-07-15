@@ -2,14 +2,14 @@ use rix::eval::Eval;
 use rix::store::build::Worker;
 use rix::store::LocalStore;
 use rix::util::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 fn main() -> NixResult {
   logger::init()?;
 
   let eval = Eval::new(Arc::new(LocalStore::new()?));
-  let realpath = Path::new("/rix/store/dsf0mza6nx8l7qqx70mc81708nmlijxv-stdenv-linux.drv");
+  let mut realpath = PathBuf::from("/rix/store/dsf0mza6nx8l7qqx70mc81708nmlijxv-stdenv-linux.drv");
   if !realpath.exists() {
     let stdenv_drv = eval.eval_inline("with import <nixpkgs> {}; stdenv")?;
 
@@ -20,10 +20,10 @@ fn main() -> NixResult {
       .ok_or_else(|| anyhow!("input is not a derivation"))?
       .v;
 
-    let _ = eval.force_string(Pos::none(), &drvpath)?;
+    realpath = Path::new(&eval.force_string(Pos::none(), &drvpath)?.s).to_path_buf();
   }
 
-  let drvpath = eval.store.parse_store_path(realpath)?;
+  let drvpath = eval.store.parse_store_path(&realpath)?;
 
   let mut worker = Worker::new(eval.store.clone());
   worker.add_needed(&drvpath)?;
