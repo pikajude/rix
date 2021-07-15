@@ -24,6 +24,23 @@ pub use prelude::{FileIngestionMethod, Repair};
 pub type PathSet = BTreeSet<String>;
 pub type StorePathSet = BTreeSet<StorePath>;
 
+#[derive(Copy, Clone)]
+pub struct ClosureOpts {
+  pub backwards: bool,
+  pub include_outputs: bool,
+  pub include_derivers: bool,
+}
+
+impl Default for ClosureOpts {
+  fn default() -> Self {
+    Self {
+      backwards: false,
+      include_outputs: false,
+      include_derivers: false,
+    }
+  }
+}
+
 pub trait Store: Send + Sync {
   fn store_path(&self) -> &Path;
 
@@ -59,7 +76,12 @@ pub trait Store: Send + Sync {
     self.query_path_info(path).map(|x| x.is_some())
   }
 
-  fn compute_fs_closure(&self, path: &StorePath, closure: &mut StorePathSet) -> Result<()>;
+  fn compute_fs_closure(
+    &self,
+    path: &StorePath,
+    closure: &mut StorePathSet,
+    opts: ClosureOpts,
+  ) -> Result<()>;
 
   /// Parse a derivation. The given path must be registered as valid in the
   /// database.
@@ -279,6 +301,8 @@ pub trait Store: Send + Sync {
   ) -> Result<StorePath> {
     self.make_text_path(name, Hash::hash(contents, HashType::SHA256), refs)
   }
+
+  fn add_temp_root(&self, path: &StorePath) -> Result<()>;
 
   fn realise_context(&self, context: &PathSet) -> Result<()>;
 

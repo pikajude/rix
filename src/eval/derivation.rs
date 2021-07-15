@@ -124,9 +124,11 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
   for path in &ctx {
     if let Some(path) = path.strip_prefix('=') {
       let mut refs = BTreeSet::new();
-      eval
-        .store
-        .compute_fs_closure(&eval.store.parse_store_path(Path::new(path))?, &mut refs)?;
+      eval.store.compute_fs_closure(
+        &eval.store.parse_store_path(Path::new(path))?,
+        &mut refs,
+        Default::default(),
+      )?;
       for r in refs {
         drv.input_sources.insert(r.clone());
         if r.is_derivation() {

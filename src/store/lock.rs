@@ -5,8 +5,13 @@ use std::{
 };
 
 use nix::{
-  errno::EWOULDBLOCK,
+  errno::{Errno, EWOULDBLOCK},
   fcntl::{flock, FlockArg},
+  sys::{
+    signal::{kill, Signal},
+    wait::{waitpid, WaitStatus},
+  },
+  unistd::{fork, setuid, ForkResult, Gid, Pid, Uid},
 };
 use users::{os::unix::GroupExt, User};
 
@@ -42,7 +47,7 @@ impl UserLocker {
       {
         return Ok(Some(UserLock {
           user: userinfo,
-          lock: userlock,
+          _lock: userlock,
         }));
       }
     }
@@ -52,12 +57,56 @@ impl UserLocker {
 
 pub struct UserLock {
   user: User,
-  lock: FileWriteLock,
+  _lock: FileWriteLock,
 }
 
 impl UserLock {
   pub fn user(&self) -> &User {
     &self.user
+  }
+
+  pub fn gid(&self) -> Gid {
+    Gid::from_raw(self.user.primary_group_id())
+  }
+
+  pub fn uid(&self) -> Uid {
+    Uid::from_raw(self.user.uid())
+  }
+
+  pub fn kill(self) -> Result<()> {
+    debug!("killing all processes running under uid '{}'", self.uid());
+
+    ensure!(
+      !self.uid().is_root(),
+      "kill() does the wrong thing for uid 0"
+    );
+
+    match unsafe { fork()? } {
+      ForkResult::Child => {
+        setuid(self.uid())?;
+
+        while let Err(e) = kill(Pid::from_raw(-1), Signal::SIGKILL) {
+          let errno = e.as_errno();
+          if errno == Some(Errno::ESRCH) || errno == Some(Errno::EPERM) {
+            break;
+          } else if errno != Some(Errno::EINTR) {
+            bail!("cannot kill processes for uid '{}'", self.uid());
+          }
+        }
+
+        std::process::exit(0);
+      }
+      ForkResult::Parent { child } => match waitpid(child, None) {
+        Ok(WaitStatus::Exited(_, _)) => {}
+        Ok(w) => bail!("unusual waitpid() output: {:?}", w),
+        Err(e) if e.as_errno() != Some(Errno::EINTR) => {
+          bail!("cannot get child exit status");
+        }
+        Err(e) => return Err(e.into()),
+      },
+    }
+
+    Ok(())
   }
 }
 

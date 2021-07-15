@@ -1,40 +1,60 @@
 use super::*;
 use nix::{fcntl::OFlag, unistd};
-use std::{io, os::unix::prelude::RawFd};
+use std::{
+  fs::File,
+  io,
+  os::unix::prelude::{FromRawFd, RawFd},
+};
 
-pub struct PipeRead(RawFd);
+pub struct PRead {
+  fd: RawFd,
+  closed: bool,
+}
 
-pub struct PipeWrite(RawFd);
+pub struct PWrite {
+  fd: RawFd,
+  closed: bool,
+}
 
-pub fn new() -> Result<(PipeRead, PipeWrite)> {
+pub fn new() -> Result<(File, File)> {
   let (read_side, write_side) = unistd::pipe2(OFlag::O_CLOEXEC)?;
-  Ok((PipeRead(read_side), PipeWrite(write_side)))
+  Ok(unsafe { (File::from_raw_fd(read_side), File::from_raw_fd(write_side)) })
 }
 
-impl io::Write for PipeWrite {
-  fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-    unistd::write(self.0, buf).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+impl PRead {
+  pub fn io(&self) -> impl io::Read {
+    unsafe { std::fs::File::from_raw_fd(self.fd) }
   }
 
-  fn flush(&mut self) -> io::Result<()> {
-    Ok(())
-  }
-}
-
-impl io::Read for PipeRead {
-  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-    unistd::read(self.0, buf).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+  pub fn close(&mut self) -> Result<()> {
+    self.closed = true;
+    Ok(unistd::close(self.fd)?)
   }
 }
 
-impl Drop for PipeRead {
+impl PWrite {
+  pub fn io(&self) -> impl io::Write {
+    unsafe { std::fs::File::from_raw_fd(self.fd) }
+  }
+
+  pub fn close(&mut self) -> Result<()> {
+    self.closed = true;
+    Ok(unistd::close(self.fd)?)
+  }
+}
+
+impl Drop for PRead {
   fn drop(&mut self) {
-    unistd::close(self.0).expect("unable to auto-close read side")
+    if !self.closed {
+      unistd::close(self.fd).expect("unable to auto-close read side")
+    }
   }
 }
 
-impl Drop for PipeWrite {
+impl Drop for PWrite {
   fn drop(&mut self) {
-    unistd::close(self.0).expect("unable to auto-close pipe")
+    if !self.closed {
+      unistd::close(self.fd).expect("unable to auto-close pipe")
+    }
   }
 }

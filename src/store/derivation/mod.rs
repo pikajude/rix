@@ -112,6 +112,25 @@ impl Derivation {
   pub fn is_builtin(&self) -> bool {
     self.builder.to_string_lossy().starts_with("builtin:")
   }
+
+  pub fn is_fixed(&self) -> bool {
+    matches!(self.ty, DerivationType::Fixed)
+  }
+
+  pub fn is_impure(&self) -> bool {
+    matches!(self.ty, DerivationType::Fixed)
+  }
+
+  pub fn outputs_and_opt_paths<S: Store + ?Sized>(&self, store: &S) -> Result<OutputsAndPaths> {
+    let mut o = OutputsAndPaths::new();
+    for (name, out) in self.outputs.clone() {
+      let pt = out
+        .get_path(store, &self.name, &name)?
+        .map(|x| x.into_owned());
+      o.insert(name, (out, pt));
+    }
+    Ok(o)
+  }
 }
 
 pub type OutputsAndPaths = BTreeMap<String, (Output, Option<StorePath>)>;

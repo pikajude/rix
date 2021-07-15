@@ -1,4 +1,8 @@
 use once_cell::sync::OnceCell;
+use std::{
+  collections::HashSet,
+  path::{Path, PathBuf},
+};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum SandboxMode {
@@ -22,7 +26,10 @@ impl Default for SandboxMode {
 #[derive(Debug)]
 pub struct Settings {
   build_users_group: Option<String>,
+  build_cores: usize,
   sandbox_mode: SandboxMode,
+  sandbox_build_dir: PathBuf,
+  sandbox_paths: HashSet<String>,
 }
 
 static SETTINGS: OnceCell<Settings> = OnceCell::new();
@@ -45,13 +52,31 @@ impl Settings {
   pub fn sandbox_mode(&self) -> SandboxMode {
     self.sandbox_mode
   }
+
+  pub fn build_cores(&self) -> usize {
+    self.build_cores
+  }
+
+  pub fn sandbox_build_dir(&self) -> &Path {
+    &self.sandbox_build_dir
+  }
+
+  pub fn sandbox_paths(&self) -> &HashSet<String> {
+    &self.sandbox_paths
+  }
 }
 
 impl Default for Settings {
   fn default() -> Self {
     Self {
       build_users_group: Some("nixbld".into()),
+      build_cores: num_cpus::get(),
       sandbox_mode: SandboxMode::default(),
+      sandbox_build_dir: PathBuf::from("/build"),
+      sandbox_paths: maplit::hashset! {
+        // "/bin=/nix-bin".into(),
+        "/dev/nvidiactrl?".into()
+      },
     }
   }
 }

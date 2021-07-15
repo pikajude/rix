@@ -1,7 +1,12 @@
 use super::*;
+use nix::{
+  fcntl::{flock, FlockArg},
+  unistd::getpid,
+};
 use slog_scope::*;
 use std::{
-  fs::File,
+  fs::{File, OpenOptions},
+  os::unix::prelude::AsRawFd,
   time::{Duration, SystemTime},
 };
 
@@ -14,6 +19,8 @@ const QUERY_REFS: &str =
 pub struct LocalStore {
   basedir: PathBuf,
   store: PathBuf,
+  roots_file: PathBuf,
+  roots_fd: File,
   db: Sqlite,
 }
 
@@ -21,10 +28,13 @@ impl LocalStore {
   pub fn new() -> Result<Self> {
     let basedir = PathBuf::from("/rix");
     let storedir = basedir.join("store");
-    let dbdir = basedir.join("var/rix/db");
+    let statedir = basedir.join("var/rix");
+    let dbdir = statedir.join("db");
+    let temprootsdir = statedir.join("temproots");
 
     std::fs::create_dir_all(&storedir)?;
     std::fs::create_dir_all(&dbdir)?;
+    std::fs::create_dir_all(&temprootsdir)?;
 
     let db = Sqlite::open(dbdir.join("rix.sqlite"))?;
 
@@ -33,10 +43,20 @@ impl LocalStore {
       "/src/store/schema.sql"
     )))?;
 
+    let roots_file = temprootsdir.join(format!("{}", getpid()));
+
+    let roots_fd = OpenOptions::new()
+      .create(true)
+      .truncate(true)
+      .write(true)
+      .open(&roots_file)?;
+
     Ok(Self {
       basedir,
       store: storedir,
       db,
+      roots_file,
+      roots_fd,
     })
   }
 }
@@ -46,11 +66,45 @@ impl Store for LocalStore {
     &self.store
   }
 
-  fn compute_fs_closure(&self, path: &StorePath, _: &mut StorePathSet) -> Result<()> {
-    warn!(
-      "NOOP: compute FS closure for path: {}",
-      self.print_store_path(path)
-    );
+  fn compute_fs_closure(
+    &self,
+    path: &StorePath,
+    paths: &mut StorePathSet,
+    opts: ClosureOpts,
+  ) -> Result<()> {
+    debug!("getting FS closure of {}", path);
+    if paths.contains(path) {
+      return Ok(());
+    }
+    paths.insert(path.clone());
+    let qpi = self
+      .query_path_info(path)?
+      .ok_or_else(|| anyhow!("invalid path {}'", self.print_store_path(path)))?;
+    for r in &qpi.refs {
+      self.compute_fs_closure(r, paths, opts)?;
+    }
+
+    if opts.include_outputs && path.is_derivation() {
+      for (_, (_, maybe_out_path)) in self
+        .try_read_derivation(path)?
+        .outputs_and_opt_paths(self)?
+      {
+        if let Some(o) = maybe_out_path {
+          if self.is_valid_path(&o)? {
+            self.compute_fs_closure(&o, paths, opts)?;
+          }
+        }
+      }
+    }
+
+    if opts.include_derivers {
+      if let Some(d) = &qpi.deriver {
+        if self.is_valid_path(d)? {
+          self.compute_fs_closure(d, paths, opts)?;
+        }
+      }
+    }
+
     Ok(())
   }
 
@@ -322,5 +376,23 @@ impl Store for LocalStore {
       .join("var/log/nix/drvs")
       .join(log_part0)
       .join(log_part1)
+  }
+
+  fn add_temp_root(&self, path: &StorePath) -> Result<()> {
+    debug!("acquiring write lock on '{}'", self.roots_file.display());
+    flock(self.roots_fd.as_raw_fd(), FlockArg::LockExclusive)?;
+
+    std::fs::write(
+      &self.roots_file,
+      format!("{}\0", self.print_store_path(path)),
+    )?;
+
+    debug!(
+      "downgrading to read lock on '{}'",
+      self.roots_file.display()
+    );
+    flock(self.roots_fd.as_raw_fd(), FlockArg::LockShared)?;
+
+    Ok(())
   }
 }

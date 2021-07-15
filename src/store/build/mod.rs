@@ -95,7 +95,7 @@ impl Worker {
   }
 
   fn has_slots(&self) -> bool {
-    self.active.len() < 2
+    self.active.is_empty()
   }
 
   fn wait_for_events(&mut self) -> Vec<Message> {

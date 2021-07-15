@@ -1,5 +1,8 @@
 #![feature(assert_matches)]
+#![feature(backtrace)]
+#![feature(backtrace_frames)]
 #![feature(pattern)]
+#![feature(io_read_to_string)]
 #![feature(termination_trait_lib)]
 #![feature(trait_alias)]
 #![feature(try_blocks)]

@@ -57,8 +57,12 @@ impl Path {
       .ok_or_else(|| anyhow!("store path does not refer to a derivation"))
   }
 
-  pub fn name(&self) -> &Name {
-    &self.name
+  pub fn name(&self) -> &str {
+    &self.name.0
+  }
+
+  pub fn hash_part(&self) -> String {
+    self.hash.to_string()
   }
 }
 
