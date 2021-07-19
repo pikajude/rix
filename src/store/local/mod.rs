@@ -252,7 +252,9 @@ impl Store for LocalStore {
 
       rm_rf::ensure_removed(&real_path)?;
 
-      std::fs::rename(&dump_to, &real_path)?;
+      // can't use rename() with possibly different filesystems (e.g. tmpfs)
+      std::fs::copy(&dump_to, &real_path)?;
+      rm_rf::ensure_removed(&dump_to)?;
     }
 
     let mut info = ValidPathInfo::new(dst_path.clone(), hash);

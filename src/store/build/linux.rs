@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::{AsRawFd, RawFd};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{exit, Command};
 use std::slice;
 
 use super::*;
@@ -11,16 +11,18 @@ use crate::store::derivation::output_path_name;
 use crate::store::lock::{UserLock, UserLocker};
 use crate::store::settings::{settings, SandboxMode};
 use crate::store::StorePathSet;
+mod clone_ext;
 
 use anyhow::Error;
 use crossbeam::thread::Scope;
-use libc::SIGCHLD;
+use ipc_channel::ipc::{IpcBytesReceiver, IpcBytesSender};
+use libc::{c_int, SIGCHLD};
 use linux_personality::{personality, ADDR_NO_RANDOMIZE};
 use nix::errno::Errno;
 use nix::fcntl::{open, OFlag};
 use nix::mount::{mount, umount2, MntFlags, MsFlags};
 use nix::pty::{posix_openpt, ptsname, unlockpt};
-use nix::sched::{clone, unshare, CloneFlags};
+use nix::sched::{unshare, CloneFlags};
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
 use nix::sys::stat::{fchmodat, stat, FchmodatFlags, Mode};
@@ -430,7 +432,7 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
     cfmakeraw(&mut term);
     tcsetattr(builder_write, SetArg::TCSANOW, &term)?;
 
-    let (mut user_ns_read, mut user_ns_write) = crate::util::pipe::new()?;
+    let (user_ns_write, user_ns_read) = ipc_channel::ipc::bytes_channel()?;
 
     match unsafe { fork() }? {
       ForkResult::Child => {
@@ -459,34 +461,27 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
           | CloneFlags::CLONE_NEWNET
           | CloneFlags::CLONE_NEWUSER;
 
-        let mut dirs_in_chroot = Some(dirs_in_chroot);
-
         info!("about to spawn child");
 
-        let child_pid = clone(
-          Box::new(move || {
-            match run_child(RunChild {
-              builder_write,
-              user_ns_read: &mut user_ns_read,
-              user_ns_write: &mut user_ns_write,
-              chroot_root: &chroot_root,
-              chroot_store_dir: &chroot_store_dir,
-              dirs_in_chroot: dirs_in_chroot
-                .take()
-                .expect("function should only run once"),
-              tmpdir_in_sandbox,
-              drv: self.drv,
-              env: &self.env,
-              input_rewrites: &input_rewrites,
-              build_user: &self.build_user,
-            }) {
-              Err(e) => {
-                eprint!("\x01{:?}\x01", e);
-                1
-              }
-              Ok(_) => 0,
+        let child_pid = clone_ext::clone(
+          move || match run_child(RunChild {
+            builder_write,
+            user_ns_read,
+            chroot_root: &chroot_root,
+            chroot_store_dir: &chroot_store_dir,
+            dirs_in_chroot,
+            tmpdir_in_sandbox,
+            drv: self.drv,
+            env: &self.env,
+            input_rewrites: &input_rewrites,
+            build_user: &self.build_user,
+          }) {
+            Err(e) => {
+              eprint!("\x01{:?}\x01", e);
+              1
             }
-          }),
+            Ok(_) => 0,
+          },
           stack_slice,
           clone_flags,
           Some(SIGCHLD),
@@ -495,11 +490,11 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
         match child_pid {
           Ok(p) => {
             write(builder_write, format!("{} {}\n", 1, p).as_bytes())?;
-            std::process::exit(0)
+            exit(0)
           }
           Err(e) => {
             error!("unable to spawn child: {:#}", e);
-            std::process::exit(1)
+            exit(1)
           }
         }
       }
@@ -508,8 +503,6 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
           WaitStatus::Exited(_, 0) => {}
           x => bail!("unable to spawn build process: {:?}", x),
         }
-
-        close(user_ns_read.as_raw_fd())?;
 
         let mut line = String::new();
         let mut builder_read = BufReader::new(builder_read);
@@ -548,15 +541,15 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
           .as_bytes(),
         )?;
 
-        let mount_ns = open(
+        let _mount_ns = open(
           Path::new(&format!("/proc/{}/ns/mnt", pid)),
           OFlag::O_RDONLY,
           Mode::empty(),
         )?;
 
-        user_ns_write.write_all(b"1")?;
+        user_ns_write.send(&[1])?;
         close(builder_write)?;
-        close(user_ns_write.as_raw_fd())?;
+        drop(user_ns_write);
 
         loop {
           line.clear();
@@ -623,10 +616,26 @@ fn chmod<P: NixPath + ?Sized>(path: &P, mode: u32) -> Result<(), nix::Error> {
   )
 }
 
+// allow /proc/self/exe to resolve to the actual binary when inside the chroot,
+// otherwise libunwind produces empty stack traces since it can't fetch any
+// symbols. this is a security hole and is disabled in release mode
+#[cfg(debug_assertions)]
+fn link_exe_for_backtrace<P: AsRef<Path>>(root: P) -> Result<()> {
+  let realpath = std::fs::read_link("/proc/self/exe")?;
+  do_bind(
+    &realpath,
+    &root.as_ref().join(
+      realpath
+        .strip_prefix("/")
+        .expect("self/exe must be absolute"),
+    ),
+    false,
+  )
+}
+
 struct RunChild<'a> {
   builder_write: RawFd,
-  user_ns_read: &'a mut File,
-  user_ns_write: &'a mut File,
+  user_ns_read: IpcBytesReceiver,
   chroot_root: &'a Path,
   chroot_store_dir: &'a Path,
   dirs_in_chroot: HashMap<PathBuf, ChrootPath>,
@@ -641,7 +650,6 @@ fn run_child(
   RunChild {
     builder_write,
     user_ns_read,
-    user_ns_write,
     chroot_root,
     chroot_store_dir,
     mut dirs_in_chroot,
@@ -660,13 +668,9 @@ fn run_child(
   dup2(fdnull, libc::STDIN_FILENO)?;
   close(fdnull)?;
 
-  close(user_ns_write.as_raw_fd())?;
-
-  let contents = std::io::read_to_string(user_ns_read)?;
-  if contents != "1" {
-    return Err(anyhow!("user namespace initialisation failed"));
-  }
-  close(user_ns_read.as_raw_fd())?;
+  let contents = user_ns_read.recv()?;
+  ensure!(contents == [1], "user namespace initialisation failed");
+  drop(user_ns_read);
 
   let sock = socket(
     AddressFamily::Inet,
@@ -763,6 +767,9 @@ fn run_child(
       target.optional,
     )?;
   }
+
+  #[cfg(debug_assertions)]
+  link_exe_for_backtrace(&chroot_root)?;
 
   let procfs = chroot_root.join("proc");
   eprintln!("creating procfs at {}", procfs.display());

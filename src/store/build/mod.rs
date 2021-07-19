@@ -33,7 +33,6 @@ enum Message {
     // the pid of a process that should be removed from self.active_pids.
     result: Result<Option<FinishedChild>>,
   },
-  #[allow(dead_code)]
   SpawnedProcess(u32),
 }
 

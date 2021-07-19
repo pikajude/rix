@@ -52,6 +52,11 @@ termcolor = "1.1.2"
 thiserror = "1.0.25"
 users = "0.11.0"
 
+[dependencies.ipc-channel]
+git = "https://github.com/servo/ipc-channel"
+rev = "d434b2b035a2e0da8b36af1bcf558ed16587d1de"
+features = ["memfd"]
+
 [dev-dependencies]
 hex = "0.4.3"
 proptest = "1.0.0"
