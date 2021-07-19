@@ -23,7 +23,7 @@ impl Default for SandboxMode {
 
 #[derive(Debug)]
 pub struct Settings {
-  build_users_group: Option<String>,
+  build_users_group: String,
   build_cores: usize,
   sandbox_mode: SandboxMode,
   sandbox_build_dir: PathBuf,
@@ -43,8 +43,8 @@ impl Settings {
     }
   }
 
-  pub fn build_users_group(&self) -> Option<&str> {
-    self.build_users_group.as_deref()
+  pub fn build_users_group(&self) -> &str {
+    self.build_users_group.as_str()
   }
 
   pub fn sandbox_mode(&self) -> SandboxMode {
@@ -67,14 +67,11 @@ impl Settings {
 impl Default for Settings {
   fn default() -> Self {
     Self {
-      build_users_group: Some("nixbld".into()),
+      build_users_group: "nixbld".into(),
       build_cores: num_cpus::get(),
       sandbox_mode: SandboxMode::default(),
       sandbox_build_dir: PathBuf::from("/build"),
-      sandbox_paths: maplit::hashset! {
-        // "/bin=/nix-bin".into(),
-        "/dev/nvidiactrl?".into()
-      },
+      sandbox_paths: maplit::hashset! {},
     }
   }
 }

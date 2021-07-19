@@ -12,6 +12,7 @@ use users::os::unix::GroupExt;
 use users::User;
 
 use super::prelude::*;
+use super::settings::settings;
 
 pub struct UserLocker {
   group_name: String,
@@ -20,7 +21,7 @@ pub struct UserLocker {
 impl UserLocker {
   pub fn get() -> Self {
     Self {
-      group_name: String::from("nixbld"),
+      group_name: String::from(settings().build_users_group()),
     }
   }
 

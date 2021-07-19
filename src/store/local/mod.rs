@@ -148,7 +148,7 @@ impl Store for LocalStore {
     repair: Repair,
   ) -> Result<StorePath> {
     crossbeam::scope(|s| {
-      let (read_side, mut write_side) = pipe::new()?;
+      let (read_side, mut write_side) = pipe()?;
 
       let hdl = s.spawn::<_, Result<()>>(move |_| {
         if method == FileIngestionMethod::Recursive {

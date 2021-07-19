@@ -10,12 +10,16 @@ use error::Catchable;
 pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
 pub use hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
 pub use nar::PathFilter;
+use nix::fcntl::OFlag;
+use nix::unistd::pipe2;
 use parking_lot::Mutex;
 pub use pos::*;
 pub use rusqlite::{named_params, params, OptionalExtension as _};
 pub use sqlite::Sqlite;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::fs::File;
 use std::ops::Try;
+use std::os::unix::prelude::FromRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Termination;
 use std::str::pattern::{Pattern, Searcher};
@@ -26,7 +30,6 @@ pub mod error;
 pub mod hash;
 pub mod logger;
 pub mod nar;
-pub mod pipe;
 mod pos;
 pub mod sqlite;
 
@@ -74,6 +77,11 @@ pub fn cat_paths<P: AsRef<Path>, Q: AsRef<Path>>(lhs: P, rhs: Q) -> PathBuf {
     )
   });
   lhs.join(rhs_rela)
+}
+
+pub fn pipe() -> Result<(impl std::io::Read, impl std::io::Write)> {
+  let (read, write) = pipe2(OFlag::O_CLOEXEC)?;
+  Ok(unsafe { (File::from_raw_fd(read), File::from_raw_fd(write)) })
 }
 
 /// A newtype wrapper around [`anyhow::Result`]. The [`Termination`] impl acts

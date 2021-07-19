@@ -1216,6 +1216,7 @@ dependencies = [
  "slog-stdlog",
  "slog-term",
  "smallvec",
+ "std-semaphore",
  "string_cache",
  "tee_readwrite",
  "tempfile",
@@ -1461,6 +1462,12 @@ dependencies = [
  "psm",
  "winapi 0.3.9",
 ]
+
+[[package]]
+name = "std-semaphore"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33ae9eec00137a8eed469fb4148acd9fc6ac8c3f9b110f52cd34698c8b5bfa0e"
 
 [[package]]
 name = "std_prelude"
