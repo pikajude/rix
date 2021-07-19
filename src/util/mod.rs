@@ -16,7 +16,7 @@ pub use rusqlite::{named_params, params, OptionalExtension as _};
 pub use sqlite::Sqlite;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Try;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Termination;
 use std::str::pattern::{Pattern, Searcher};
 
@@ -62,6 +62,18 @@ pub fn break_str<'a, P: Pattern<'a>>(s: &'a str, pattern: P) -> Option<(&'a str,
   let (start, end) = search.next_match()?;
 
   Some((&s[..start], &s[end..]))
+}
+
+pub fn cat_paths<P: AsRef<Path>, Q: AsRef<Path>>(lhs: P, rhs: Q) -> PathBuf {
+  let lhs = lhs.as_ref();
+  let rhs = rhs.as_ref();
+  let rhs_rela = rhs.strip_prefix("/").unwrap_or_else(|_| {
+    panic!(
+      "second argument to cat_paths must be absolute but was {}",
+      rhs.display()
+    )
+  });
+  lhs.join(rhs_rela)
 }
 
 /// A newtype wrapper around [`anyhow::Result`]. The [`Termination`] impl acts

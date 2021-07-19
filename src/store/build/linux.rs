@@ -32,8 +32,8 @@ use nix::unistd::*;
 use nix::NixPath;
 use rlimit::Resource;
 
-const SANDBOX_UID: libc::uid_t = 1000;
-const SANDBOX_GID: libc::uid_t = 100;
+const SANDBOX_UID: Uid = Uid::from_raw(1000);
+const SANDBOX_GID: Gid = Gid::from_raw(100);
 
 const NULL: Option<&'static str> = None;
 
@@ -571,7 +571,9 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
   }
 }
 
-fn do_bind(source: &Path, target: &Path, optional: bool) -> Result<()> {
+fn do_bind<P: AsRef<Path>, Q: AsRef<Path>>(source: P, target: Q, optional: bool) -> Result<()> {
+  let source = source.as_ref();
+  let target = target.as_ref();
   let st = match stat(source) {
     Ok(s) => s,
     Err(x) => {
@@ -613,23 +615,6 @@ fn chmod<P: NixPath + ?Sized>(path: &P, mode: u32) -> Result<(), nix::Error> {
     path,
     Mode::from_bits_truncate(mode),
     FchmodatFlags::FollowSymlink,
-  )
-}
-
-// allow /proc/self/exe to resolve to the actual binary when inside the chroot,
-// otherwise libunwind produces empty stack traces since it can't fetch any
-// symbols. this is a security hole and is disabled in release mode
-#[cfg(debug_assertions)]
-fn link_exe_for_backtrace<P: AsRef<Path>>(root: P) -> Result<()> {
-  let realpath = std::fs::read_link("/proc/self/exe")?;
-  do_bind(
-    &realpath,
-    &root.as_ref().join(
-      realpath
-        .strip_prefix("/")
-        .expect("self/exe must be absolute"),
-    ),
-    false,
   )
 }
 
@@ -757,24 +742,11 @@ fn run_child(
     if target.path == Path::new("/proc") {
       continue;
     }
-    do_bind(
-      &target.path,
-      &chroot_root.join(
-        source
-          .strip_prefix("/")
-          .expect("source must start with a slash"),
-      ),
-      target.optional,
-    )?;
+    do_bind(target.path, cat_paths(chroot_root, source), target.optional)?;
   }
 
-  #[cfg(debug_assertions)]
-  link_exe_for_backtrace(&chroot_root)?;
-
   let procfs = chroot_root.join("proc");
-  eprintln!("creating procfs at {}", procfs.display());
   fs::create_dir_all(&procfs)?;
-  eprintln!("mounting procfs at {}", procfs.display());
   mount(
     Some("none"),
     procfs.as_path(),
@@ -810,18 +782,18 @@ fn run_child(
         if e.as_errno() != Some(Errno::EINVAL) {
           return Err(e.into());
         }
-        do_bind(
-          Path::new("/dev/pts"),
-          chroot_root.join("dev/pts").as_path(),
-          false,
-        )?;
-        do_bind(
-          Path::new("/dev/ptmx"),
-          chroot_root.join("dev/ptmx").as_path(),
-          false,
-        )?;
+        do_bind("/dev/pts", chroot_root.join("dev/pts"), false)?;
+        do_bind("/dev/ptmx", chroot_root.join("dev/ptmx"), false)?;
       }
     }
+  }
+
+  #[cfg(debug_assertions)]
+  {
+    // libunwind opens /proc/self/exe to resolve symbols. the path it points to
+    // normally doesn't exist in the sandbox, so this bind mount makes it accessible
+    let real_self = fs::read_link("/proc/self/exe")?;
+    do_bind(&real_self, cat_paths(chroot_root, &real_self), false)?;
   }
 
   unshare(CloneFlags::CLONE_NEWNS)?;
@@ -832,8 +804,8 @@ fn run_child(
   umount2("real-root", MntFlags::MNT_DETACH)?;
   remove_dir("real-root")?;
 
-  setgid(Gid::from_raw(SANDBOX_GID))?;
-  setuid(Uid::from_raw(SANDBOX_UID))?;
+  setgid(SANDBOX_GID)?;
+  setuid(SANDBOX_UID)?;
 
   chdir(tmpdir_in_sandbox)?;
 
