@@ -1,7 +1,7 @@
-use std::fs::{self, remove_dir, File};
-use std::io::{BufRead, BufReader, Write};
+use std::fs::{self, remove_dir};
+use std::io::{BufRead, BufReader};
 use std::os::unix::fs::symlink;
-use std::os::unix::prelude::{AsRawFd, RawFd};
+use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 use std::slice;
@@ -15,8 +15,8 @@ mod clone_ext;
 
 use anyhow::Error;
 use crossbeam::thread::Scope;
-use ipc_channel::ipc::{IpcBytesReceiver, IpcBytesSender};
-use libc::{c_int, SIGCHLD};
+use ipc_channel::ipc::IpcBytesReceiver;
+use libc::SIGCHLD;
 use linux_personality::{personality, ADDR_NO_RANDOMIZE};
 use nix::errno::Errno;
 use nix::fcntl::{open, OFlag};
