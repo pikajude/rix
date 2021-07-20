@@ -4,7 +4,7 @@ pub use super::Store;
 pub use crate::util::*;
 pub use anyhow::{Context as _, Result};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum FileIngestionMethod {
   Flat,
   Recursive,

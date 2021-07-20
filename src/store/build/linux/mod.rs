@@ -7,11 +7,12 @@ use std::process::{exit, Command};
 use std::slice;
 
 use super::*;
+use crate::fetch::builtin_fetchurl;
 use crate::store::derivation::output_path_name;
 use crate::store::lock::{UserLock, UserLocker};
 use crate::store::settings::{settings, SandboxMode};
 use crate::store::StorePathSet;
-mod clone_ext;
+mod sys_ext;
 
 use anyhow::Error;
 use crossbeam::thread::Scope;
@@ -30,6 +31,7 @@ use nix::sys::termios::{cfmakeraw, tcgetattr, tcsetattr, SetArg};
 use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::*;
 use nix::NixPath;
+use parking_lot::Once;
 use rlimit::Resource;
 
 const SANDBOX_UID: Uid = Uid::from_raw(1000);
@@ -76,7 +78,6 @@ type ProcessEnv = HashMap<String, String>;
 
 struct Build<'a, 'scope, S: Store + ?Sized> {
   store: &'a S,
-  messages: &'a Queue<Message>,
   scope: &'a Scope<'scope>,
   drv_path: &'a StorePath,
   drv: &'a Derivation,
@@ -166,7 +167,16 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
     Ok(())
   }
 
-  fn run(mut self) -> Result<Option<FinishedChild>> {
+  fn run(mut self) -> Result<()> {
+    static NSS_INIT: Once = Once::new();
+
+    if self.drv.is_builtin() {
+      NSS_INIT.call_once(|| {
+        let res = dns_lookup::getaddrinfo(Some("invalid-domain.invalid"), Some("http"), None);
+        assert!(res.is_err());
+      });
+    }
+
     for (drv_path, wanted) in self.drv.input_derivations.iter() {
       let outs = self
         .store
@@ -432,6 +442,8 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
     cfmakeraw(&mut term);
     tcsetattr(builder_write, SetArg::TCSANOW, &term)?;
 
+    let private_network = !self.drv.is_impure();
+
     let (user_ns_write, user_ns_read) = ipc_channel::ipc::bytes_channel()?;
 
     match unsafe { fork() }? {
@@ -453,17 +465,18 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
         }?;
         let stack_slice = unsafe { slice::from_raw_parts_mut(stack.cast::<u8>(), stack_size) };
 
-        let clone_flags = CloneFlags::CLONE_NEWPID
+        let mut clone_flags = CloneFlags::CLONE_NEWPID
           | CloneFlags::CLONE_NEWNS
           | CloneFlags::CLONE_NEWIPC
           | CloneFlags::CLONE_NEWUTS
           | CloneFlags::CLONE_PARENT
-          | CloneFlags::CLONE_NEWNET
           | CloneFlags::CLONE_NEWUSER;
 
-        info!("about to spawn child");
+        if private_network {
+          clone_flags.set(CloneFlags::CLONE_NEWNET, true);
+        }
 
-        let child_pid = clone_ext::clone(
+        let child_pid = sys_ext::clone(
           move || match run_child(RunChild {
             builder_write,
             user_ns_read,
@@ -471,10 +484,10 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
             chroot_store_dir: &chroot_store_dir,
             dirs_in_chroot,
             tmpdir_in_sandbox,
+            private_network,
             drv: self.drv,
             env: &self.env,
             input_rewrites: &input_rewrites,
-            build_user: &self.build_user,
           }) {
             Err(e) => {
               eprint!("\x01{:?}\x01", e);
@@ -553,7 +566,12 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
 
         loop {
           line.clear();
-          builder_read.read_line(&mut line)?;
+          match builder_read.read_line(&mut line) {
+            Err(e) if e.raw_os_error() == Some(libc::EIO) => break,
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(e) => return Err(e.into()),
+          }
           if let Some(desc) = line.strip_prefix('\x01') {
             let mut full_contents = vec![];
             let amt_read = builder_read.read_until(1, &mut full_contents)?;
@@ -566,6 +584,7 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
           }
           debug!("sandbox setup: {}", line.trim_end());
         }
+        Ok(())
       }
     }
   }
@@ -625,10 +644,10 @@ struct RunChild<'a> {
   chroot_store_dir: &'a Path,
   dirs_in_chroot: HashMap<PathBuf, ChrootPath>,
   tmpdir_in_sandbox: &'a Path,
+  private_network: bool,
   drv: &'a Derivation,
   env: &'a HashMap<String, String>,
   input_rewrites: &'a HashMap<String, String>,
-  build_user: &'a UserLock,
 }
 
 fn run_child(
@@ -642,7 +661,7 @@ fn run_child(
     drv,
     env,
     input_rewrites,
-    build_user: _,
+    private_network,
   }: RunChild,
 ) -> Result<()> {
   setsid()?;
@@ -657,17 +676,19 @@ fn run_child(
   ensure!(contents == [1], "user namespace initialisation failed");
   drop(user_ns_read);
 
-  let sock = socket(
-    AddressFamily::Inet,
-    SockType::Datagram,
-    SockFlag::empty(),
-    None,
-  )?;
-  netdevice::set_flags(
-    sock,
-    "lo",
-    &(netdevice::IFF_UP | netdevice::IFF_LOOPBACK | netdevice::IFF_RUNNING),
-  )?;
+  if private_network {
+    let sock = socket(
+      AddressFamily::Inet,
+      SockType::Datagram,
+      SockFlag::empty(),
+      None,
+    )?;
+    netdevice::set_flags(
+      sock,
+      "lo",
+      &(netdevice::IFF_UP | netdevice::IFF_LOOPBACK | netdevice::IFF_RUNNING),
+    )?;
+  }
 
   sethostname("localhost")?;
 
@@ -813,21 +834,34 @@ fn run_child(
 
   Resource::CORE.set(0, rlimit::INFINITY)?;
 
-  let mut builder = Command::new(&drv.builder);
+  if let Some(b) = drv.as_builtin() {
+    let new_env = drv
+      .env
+      .iter()
+      .map(|(k, v)| (k.to_string(), rewrite(v, input_rewrites)))
+      .collect::<HashMap<_, _>>();
 
-  for (var, value) in env {
-    builder.env(var, rewrite(value, input_rewrites));
+    match b.as_str() {
+      "fetchurl" => builtin_fetchurl(&new_env),
+      x => bail!("unsupported builtin {}", x),
+    }
+  } else {
+    let mut builder = Command::new(&drv.builder);
+
+    for (var, value) in env {
+      builder.env(var, rewrite(value, input_rewrites));
+    }
+
+    for arg in &drv.args {
+      builder.arg(rewrite(arg, input_rewrites));
+    }
+
+    eprintln!("executing builder: {:?}", builder);
+
+    let st = builder.status()?;
+    ensure!(st.success(), "non-zero exit status: {}", st);
+    Ok(())
   }
-
-  for arg in &drv.args {
-    builder.arg(rewrite(arg, input_rewrites));
-  }
-
-  eprintln!("executing builder: {:?}", builder);
-
-  let st = builder.status()?;
-  ensure!(st.success(), "non-zero exit status: {}", st);
-  Ok(())
 }
 
 fn rewrite(s: &str, rewrites: &HashMap<String, String>) -> String {
@@ -843,11 +877,10 @@ fn rewrite(s: &str, rewrites: &HashMap<String, String>) -> String {
 
 pub(super) fn build<S: Store + ?Sized>(
   store: &S,
-  messages: &Queue<Message>,
   scope: &Scope<'_>,
   path: &StorePath,
   drv: &Derivation,
-) -> Result<Option<FinishedChild>> {
+) -> Result<()> {
   store.add_temp_root(path)?;
 
   Build {
@@ -855,7 +888,6 @@ pub(super) fn build<S: Store + ?Sized>(
       .find()?
       .ok_or_else(|| anyhow!("no UIDs available for build"))?,
     store,
-    messages,
     scope,
     drv_path: path,
     drv,

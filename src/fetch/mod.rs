@@ -2,9 +2,11 @@ mod archive;
 mod cache;
 
 use crate::store::{FileIngestionMethod, Repair, Store, StorePath, ValidPathInfo};
+use crate::util::nar::restore_path;
 use crate::util::*;
 use cache::Cache;
 use curl::easy::{Easy, HttpVersion, WriteError};
+use nix::sys::stat::{fchmodat, FchmodatFlags, Mode};
 use serde_json::{Map, Value};
 use slog::{Drain, Level};
 use std::collections::HashMap;
@@ -193,6 +195,41 @@ pub fn download_file<S: Store + ?Sized>(
     etag: download_result.etag,
     real_url: download_result.real_uri,
   })
+}
+
+pub fn builtin_fetchurl(env: &HashMap<String, String>) -> Result<()> {
+  let getenv = |x: &'static str| {
+    env
+      .get(x)
+      .ok_or_else(|| anyhow!("attribute '{}' missing", x))
+  };
+  let out_path = getenv("out")?;
+  let url = getenv("url")?.to_string();
+  let unpack = env.get("unpack").map_or(false, |x| x == "1");
+  let req = RequestInfo {
+    url,
+    headers: vec![],
+    expect_etag: None,
+    verify_tls: false,
+  };
+  let mut res = curl(req)?;
+  if unpack {
+    restore_path(out_path, res.contents)?
+  } else {
+    let mut out = std::fs::File::create(out_path)?;
+    std::io::copy(&mut res.contents, &mut out)?;
+  }
+
+  if env.get("executable").map_or(false, |x| x == "1") {
+    fchmodat(
+      None,
+      out_path.as_str(),
+      Mode::from_bits_truncate(0o755),
+      FchmodatFlags::FollowSymlink,
+    )?;
+  }
+
+  Ok(())
 }
 
 fn get_str(m: &Map<String, Value>, key: &str) -> Result<String> {

@@ -1,6 +1,6 @@
 use crate::store::prelude::*;
 use crate::store::HashType;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Display;
 use std::path::Path;
 use std::str::pattern::Pattern;
@@ -81,7 +81,58 @@ impl Derivation {
     }
 
     parser.expect(')')?;
+
+    drv.ty = drv.determine_type()?;
     Ok(drv)
+  }
+
+  fn determine_type(&self) -> anyhow::Result<DerivationType> {
+    let mut ia = HashSet::new();
+    let mut fixed = HashSet::new();
+    let mut floating = HashSet::new();
+    let mut deferred = HashSet::new();
+    let mut floating_type = None;
+    for (name, out) in &self.outputs {
+      match out {
+        Output::InputAddressed(_) => {
+          ia.insert(name);
+        }
+        Output::Fixed(_) => {
+          fixed.insert(name);
+        }
+        Output::Floating(_, hashtype) => {
+          floating.insert(name);
+          match floating_type {
+            None => {
+              floating_type = Some(*hashtype);
+            }
+            Some(t) => ensure!(
+              t == *hashtype,
+              "all floating outputs must use the same type"
+            ),
+          }
+        }
+        Output::Deferred => {
+          deferred.insert(name);
+        }
+      }
+    }
+
+    match (ia.len(), fixed.len(), floating.len(), deferred.len()) {
+      (0, 0, 0, 0) => bail!("must have at least one output"),
+      (_, 0, 0, 0) => Ok(DerivationType::InputAddressed),
+      (0, x, 0, 0) => {
+        ensure!(x == 1, "only one fixed output is allowed");
+        ensure!(
+          *fixed.iter().next().unwrap() == "out",
+          "fixed output must be named \"out\""
+        );
+        Ok(DerivationType::Fixed)
+      }
+      (0, 0, _, 0) => Ok(DerivationType::Floating),
+      (0, 0, 0, _) => Ok(DerivationType::DeferredInputAddressed),
+      _ => bail!("can't mix output types in one derivation"),
+    }
   }
 }
 

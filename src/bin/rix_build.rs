@@ -9,7 +9,7 @@ fn main() -> NixResult {
   logger::init()?;
 
   let eval = Eval::new(Arc::new(LocalStore::new()?));
-  let mut realpath = PathBuf::from("/rix/store/9z26ajk153a77x5m3dqqv5j61j5yhx1v-stdenv-linux.drv");
+  let mut realpath = PathBuf::from("/rix/store/xj18wv1765ns1wkb4fmmyx54lhm376vw-stdenv-linux.drv");
   if !realpath.exists() {
     let stdenv_drv = eval.eval_inline("with import <nixpkgs> {}; stdenv")?;
 

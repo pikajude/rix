@@ -366,6 +366,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns-lookup"
+version = "1.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53ecafc952c4528d9b51a458d1a8904b81783feff9fde08ab6ed2545ff396872"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "socket2",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1184,6 +1196,7 @@ dependencies = [
  "derivative",
  "derive_more",
  "dirs",
+ "dns-lookup",
  "enum-as-inner",
  "hex",
  "ipc-channel",
@@ -1216,7 +1229,6 @@ dependencies = [
  "slog-stdlog",
  "slog-term",
  "smallvec",
- "std-semaphore",
  "string_cache",
  "tee_readwrite",
  "tempfile",
@@ -1462,12 +1474,6 @@ dependencies = [
  "psm",
  "winapi 0.3.9",
 ]
-
-[[package]]
-name = "std-semaphore"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33ae9eec00137a8eed469fb4148acd9fc6ac8c3f9b110f52cd34698c8b5bfa0e"
 
 [[package]]
 name = "std_prelude"

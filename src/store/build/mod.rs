@@ -1,10 +1,11 @@
 use crate::store::prelude::*;
 use crossbeam::thread::Scope;
-use dep_queue::DependencyQueue;
-use queue::Queue;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
+
+use self::dep_queue::DependencyQueue;
+use self::queue::Queue;
 
 mod dep_queue;
 mod queue;
@@ -21,30 +22,20 @@ cfg_if::cfg_if! {
   }
 }
 
-#[derive(Debug, Deref, Copy, Clone)]
-struct FinishedChild(u32);
-
 #[derive(Debug)]
 enum Message {
-  Finish {
-    job_id: usize,
-    outputs: BTreeSet<String>,
-    // If `Err`, the build failed and other builds should be killed. If `Ok`, optionally returns
-    // the pid of a process that should be removed from self.active_pids.
-    result: Result<Option<FinishedChild>>,
-  },
-  SpawnedProcess(u32),
+  Finish(usize, Vec<String>, Result<()>),
 }
+
+type DerivationKey = StorePath;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Worker {
-  queue: DependencyQueue<StorePath, String, Derivation>,
-  pending: Vec<(StorePath, Derivation)>,
-  active: HashMap<usize, StorePath>,
-  messages: Arc<Queue<Message>>,
+  queue: DependencyQueue<DerivationKey, String, Derivation>,
+  active: HashMap<usize, DerivationKey>,
   next_id: usize,
-  active_pids: HashSet<u32>,
+  messages: Arc<Queue<Message>>,
   #[derivative(Debug = "ignore")]
   store: Arc<dyn Store>,
 }
@@ -54,45 +45,75 @@ impl Worker {
     Self {
       store,
       queue: Default::default(),
-      pending: Default::default(),
       active: Default::default(),
-      messages: Arc::new(Queue::new(100)),
-      next_id: Default::default(),
-      active_pids: Default::default(),
+      messages: Arc::new(Queue::new(10)),
+      next_id: 1,
     }
   }
 
-  // FIXME: This method produces a dependency queue of X objects (i.e. the entire
-  // dependency tree) even if everything has already been built.
-  pub fn add_needed(&mut self, path: &StorePath) -> Result<()> {
+  pub fn add_needed(&mut self, path: &DerivationKey) -> Result<()> {
+    if self.queue.dep_map.contains_key(path) {
+      return Ok(());
+    }
     let drv = self.store.read_derivation(path)?;
-    let deps_iter = drv
-      .input_derivations
-      .iter()
-      .flat_map(|(path, outputs)| outputs.iter().map(move |o| (path.clone(), o.clone())))
-      .collect::<Vec<(StorePath, String)>>();
-    for path in drv.input_derivations.keys() {
-      if !self.queue.dep_map.contains_key(path) {
-        self.add_needed(path)?;
+    let mut deps = vec![];
+    for (drv_path, drv_outs) in &drv.input_derivations {
+      let input_drv = self.store.read_derivation(drv_path)?;
+      let mut any_missing = false;
+      for drv_out in drv_outs {
+        let dep_out_path =
+          input_drv.outputs[drv_out].get_path(&*self.store, &input_drv.name, drv_out)?;
+        if let Some(p) = dep_out_path {
+          if self.store.is_valid_path(&*p)? {
+            continue;
+          }
+        }
+        any_missing = true;
+        deps.push((drv_path.clone(), drv_out.clone()));
+      }
+      if any_missing {
+        self.add_needed(drv_path)?;
       }
     }
-    self.queue.enqueue(path.clone(), drv, deps_iter);
+
+    let cost = if drv.is_builtin() { 1 } else { 10 };
+    self.queue.queue(path.clone(), drv, deps, cost);
+
     Ok(())
   }
 
-  fn spawn_if_possible(&mut self, scope: &Scope) {
-    while let Some((path, drv)) = self.queue.dequeue() {
-      self.pending.push((path, drv));
-    }
+  fn has_slots(&self) -> bool {
+    self.active.len() < 2
+  }
 
-    while !self.pending.is_empty() && self.has_slots() {
-      let (path, drv) = self.pending.remove(0);
-      self.run(path, drv, scope);
+  fn try_spawn(&mut self, scope: &Scope) {
+    loop {
+      if !self.has_slots() {
+        break;
+      }
+      match self.queue.dequeue() {
+        None => break,
+        Some((path, drv)) => self.spawn(path, drv, scope),
+      }
     }
   }
 
-  fn has_slots(&self) -> bool {
-    self.active.is_empty()
+  fn spawn(&mut self, path: StorePath, drv: Derivation, scope: &Scope) {
+    let id = self.next_id;
+    self.next_id += 1;
+    assert!(self.active.insert(id, path.clone()).is_none());
+
+    let store = Arc::clone(&self.store);
+    let messages = Arc::clone(&self.messages);
+
+    scope.spawn(move |scope| {
+      let res = sys::build(&*store, scope, &path, &drv);
+      messages.push(Message::Finish(
+        id,
+        drv.outputs.keys().cloned().collect(),
+        res,
+      ));
+    });
   }
 
   fn wait_for_events(&mut self) -> Vec<Message> {
@@ -115,11 +136,11 @@ impl Worker {
   }
 
   fn drain(&mut self, scope: &Scope) -> Result<()> {
-    let mut error = None;
+    let mut err = None;
 
     loop {
-      if error.is_none() {
-        self.spawn_if_possible(scope);
+      if err.is_none() {
+        self.try_spawn(scope);
       }
 
       if self.active.is_empty() {
@@ -128,17 +149,31 @@ impl Worker {
 
       for event in self.wait_for_events() {
         if let Err(e) = self.handle_event(event) {
-          self.handle_error(&mut error, e);
+          self.handle_error(&mut err, e);
         }
       }
     }
 
-    if let Some(e) = error {
+    if let Some(e) = err {
       Err(e)
-    } else if self.queue.is_empty() && self.pending.is_empty() {
+    } else if self.queue.is_empty() && self.active.is_empty() {
       Ok(())
     } else {
-      bail!("internal error: some jobs left in queue")
+      bail!("internal error: jobs left in queue")
+    }
+  }
+
+  fn handle_event(&mut self, event: Message) -> Result<()> {
+    match event {
+      Message::Finish(id, outputs, result) => {
+        let drv_path = self.active.remove(&id).expect("incorrect ID");
+        for out in &outputs {
+          self.queue.finish(&drv_path, out);
+        }
+        let _ = result?;
+        debug!("build finished"; "path" => %drv_path, "outputs" => ?outputs);
+        Ok(())
+      }
     }
   }
 
@@ -154,78 +189,9 @@ impl Worker {
     }
   }
 
-  fn handle_event(&mut self, event: Message) -> Result<()> {
-    match event {
-      Message::Finish {
-        job_id,
-        outputs,
-        result,
-      } => {
-        let thingy = self.active.remove(&job_id).unwrap();
-        for out in &outputs {
-          self.queue.finish(&thingy, out);
-        }
-        let x = result?;
-        debug!("build finished"; "path" => %thingy, "outputs" => ?outputs);
-        if let Some(pid) = x {
-          self.active_pids.remove(&*pid);
-        }
-      }
-      Message::SpawnedProcess(pid) => {
-        assert!(self.active_pids.insert(pid));
-      }
-    }
-    Ok(())
-  }
-
-  fn run(&mut self, path: StorePath, drv: Derivation, scope: &Scope) {
-    let id = self.next_id;
-    self.next_id += 1;
-    assert!(self.active.insert(id, path.clone()).is_none());
-
-    debug!("starting build"; "path" => %path);
-
-    let messages = Arc::clone(&self.messages);
-    let store = Arc::clone(&self.store);
-
-    let doit = move |scope: &Scope<'_>| {
-      let mut result = Ok(None);
-
-      let setup_failure: Result<()> = try {
-        let mut needs_build = false;
-        for (name, out) in drv.outputs.iter() {
-          if !store.is_valid_path(&*out.path(&*store, &drv.name, name)?)? {
-            needs_build = true;
-            break;
-          }
-        }
-
-        if !needs_build {
-          messages.push(Message::Finish {
-            job_id: id,
-            outputs: drv.outputs.keys().cloned().collect(),
-            result,
-          });
-        }
-      };
-
-      result = setup_failure.and_then(|_| sys::build(&*store, &messages, scope, &path, &drv));
-
-      messages.push(Message::Finish {
-        job_id: id,
-        outputs: drv.outputs.keys().cloned().collect(),
-        result,
-      });
-    };
-
-    scope.spawn(doit);
-  }
-
   pub fn build(mut self) -> Result<()> {
     self.queue.queue_finished();
 
-    trace!("{:#?}", self.queue);
-
-    crossbeam::thread::scope(|s| self.drain(s)).unwrap()
+    crossbeam::thread::scope(|scope| self.drain(scope)).unwrap()
   }
 }

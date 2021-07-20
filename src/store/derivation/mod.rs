@@ -22,7 +22,7 @@ pub enum HashModulo {
   Deferred(Hash),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct FixedOutputHash {
   pub method: FileIngestionMethod,
   pub hash: Hash,
@@ -49,7 +49,7 @@ impl FixedOutputHash {
   }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, EnumAsInner)]
+#[derive(Debug, Eq, PartialEq, Clone, EnumAsInner, Hash)]
 pub enum Output {
   InputAddressed(StorePath),
   Fixed(FixedOutputHash),
@@ -109,7 +109,15 @@ pub struct Derivation {
 
 impl Derivation {
   pub fn is_builtin(&self) -> bool {
-    self.builder.to_string_lossy().starts_with("builtin:")
+    self.as_builtin().is_some()
+  }
+
+  pub fn as_builtin(&self) -> Option<String> {
+    self
+      .builder
+      .to_string_lossy()
+      .strip_prefix("builtin:")
+      .map(|x| x.to_string())
   }
 
   pub fn is_fixed(&self) -> bool {
