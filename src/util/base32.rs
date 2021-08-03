@@ -10,7 +10,7 @@ lazy_static! {
     }
     xs
   };
-  static ref IS_BASE32: [bool; 256] = {
+  pub static ref IS_BASE32: [bool; 256] = {
     let mut isb32 = [false; 256];
     for c in B32_CHARS.iter() {
       isb32[*c as usize] = true;

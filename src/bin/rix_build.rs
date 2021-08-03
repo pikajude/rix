@@ -26,7 +26,7 @@ fn main() -> NixResult {
   let drvpath = eval.store.parse_store_path(&realpath)?;
 
   let mut worker = Worker::new(eval.store.clone());
-  worker.add_needed(&drvpath)?;
+  worker.add_needed_all(&drvpath)?;
   worker.build()?;
 
   ok()

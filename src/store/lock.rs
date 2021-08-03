@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::prelude::RawFd;
 use std::path::Path;
 
-use nix::errno::{Errno, EWOULDBLOCK};
+use nix::errno::Errno;
 use nix::fcntl::{flock, FlockArg};
 use nix::sys::signal::{kill, Signal};
 use nix::sys::wait::{waitpid, WaitStatus};
@@ -82,11 +84,10 @@ impl UserLock {
       ForkResult::Child => {
         setuid(self.uid())?;
 
-        while let Err(e) = kill(Pid::from_raw(-1), Signal::SIGKILL) {
-          let errno = e.as_errno();
-          if errno == Some(Errno::ESRCH) || errno == Some(Errno::EPERM) {
+        while let Err(errno) = kill(Pid::from_raw(-1), Signal::SIGKILL) {
+          if errno == Errno::ESRCH || errno == Errno::EPERM {
             break;
-          } else if errno != Some(Errno::EINTR) {
+          } else if errno != Errno::EINTR {
             bail!("cannot kill processes for uid '{}'", self.uid());
           }
         }
@@ -96,7 +97,7 @@ impl UserLock {
       ForkResult::Parent { child } => match waitpid(child, None) {
         Ok(WaitStatus::Exited(_, _)) => {}
         Ok(w) => bail!("unusual waitpid() output: {:?}", w),
-        Err(e) if e.as_errno() != Some(Errno::EINTR) => {
+        Err(e) if e != Errno::EINTR => {
           bail!("cannot get child exit status");
         }
         Err(e) => return Err(e.into()),
@@ -157,7 +158,7 @@ impl FileWriteLock {
 
 fn lock_file(fd: RawFd, ty: FlockArg) -> Result<bool> {
   if let Err(e) = flock(fd, ty) {
-    if e.as_errno() == Some(EWOULDBLOCK) {
+    if e == Errno::EWOULDBLOCK {
       Ok(false)
     } else {
       Err(e.into())

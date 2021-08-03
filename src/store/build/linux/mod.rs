@@ -1,16 +1,16 @@
-use std::fs::{self, remove_dir};
+use std::borrow::Cow;
 use std::io::{BufRead, BufReader};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
-use std::slice;
+use std::{fs, slice};
 
 use super::*;
 use crate::fetch::builtin_fetchurl;
 use crate::store::derivation::output_path_name;
 use crate::store::lock::{UserLock, UserLocker};
-use crate::store::settings::{settings, SandboxMode};
+use crate::store::settings::{settings, BuildMode, SandboxMode};
 use crate::store::StorePathSet;
 mod sys_ext;
 
@@ -44,6 +44,7 @@ struct ChrootPath {
   optional: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum PathStatus {
   Corrupt,
@@ -76,9 +77,8 @@ struct InitialOutput {
 
 type ProcessEnv = HashMap<String, String>;
 
-struct Build<'a, 'scope, S: Store + ?Sized> {
+struct Build<'a, S: Store + ?Sized> {
   store: &'a S,
-  scope: &'a Scope<'scope>,
   drv_path: &'a StorePath,
   drv: &'a Derivation,
   build_user: UserLock,
@@ -86,7 +86,7 @@ struct Build<'a, 'scope, S: Store + ?Sized> {
   input_paths: StorePathSet,
 }
 
-impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
+impl<'a, S: Store + ?Sized> Build<'a, S> {
   fn fallback_from_output(&self, output_name: &str) -> Result<StorePath> {
     self.store.make_store_path(
       &format!("rewrite:{}:name:{}", self.drv_path.to_string(), output_name),
@@ -177,6 +177,8 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
       });
     }
 
+    let build_mode = settings().build_mode();
+
     for (drv_path, wanted) in self.drv.input_derivations.iter() {
       let outs = self
         .store
@@ -258,11 +260,11 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
     let mut input_rewrites = HashMap::new();
     let mut scratch_outputs = HashMap::new();
     let mut redirected_outputs = HashMap::new();
-    for (output_name, status) in initial_outputs {
+    for (output_name, status) in initial_outputs.iter() {
       let scratch_path = match status.known {
-        None => self.fallback_from_output(&output_name)?,
+        None => self.fallback_from_output(output_name)?,
         Some(ref k) => {
-          if use_chroot || !k.is_present() || !k.is_valid() {
+          if use_chroot || !k.is_present() || (build_mode != BuildMode::Repair && !k.is_valid()) {
             k.path.clone()
           } else {
             self.fallback_from_path(&k.path)?
@@ -270,14 +272,14 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
         }
       };
       input_rewrites.insert(
-        Hash::placeholder(&output_name),
+        Hash::placeholder(output_name),
         self.store.print_store_path(&scratch_path),
       );
-      scratch_outputs.insert(output_name, scratch_path.clone());
+      scratch_outputs.insert(output_name.clone(), scratch_path.clone());
 
       let fixed_final_path = match status.known {
         None => continue,
-        Some(p) => p.path,
+        Some(ref p) => p.path.clone(),
       };
 
       if fixed_final_path == scratch_path {
@@ -584,6 +586,33 @@ impl<'a, 'scope, S: Store + ?Sized> Build<'a, 'scope, S> {
           }
           debug!("sandbox setup: {}", line.trim_end());
         }
+
+        // at this point, builder terminated without throwing an error, so assume the
+        // build succeeded
+        let mut referenceable_paths = HashSet::new();
+        referenceable_paths.extend(self.input_paths.iter());
+        referenceable_paths.extend(scratch_outputs.values());
+
+        for outname in self.drv.outputs.keys() {
+          let actual_path = cat_paths(
+            &chroot_root,
+            self.store.print_store_path(&scratch_outputs[outname]),
+          );
+
+          debug!(
+            "scanning for references for output '{}' in temp location '{}'",
+            outname,
+            actual_path.display()
+          );
+
+          // TODO: canonicalize
+
+          let _found = crate::store::refs::scan_for_references(
+            &actual_path,
+            referenceable_paths.iter().copied(),
+          )?;
+        }
+
         Ok(())
       }
     }
@@ -596,7 +625,7 @@ fn do_bind<P: AsRef<Path>, Q: AsRef<Path>>(source: P, target: Q, optional: bool)
   let st = match stat(source) {
     Ok(s) => s,
     Err(x) => {
-      if x.as_errno() == Some(Errno::ENOENT) && optional {
+      if x == Errno::ENOENT && optional {
         return Ok(());
       } else {
         return Err(x.into());
@@ -637,6 +666,107 @@ fn chmod<P: NixPath + ?Sized>(path: &P, mode: u32) -> Result<(), nix::Error> {
   )
 }
 
+fn init_seccomp() -> Result<()> {
+  use scmp_compare::SCMP_CMP_MASKED_EQ;
+  use seccomp_sys::*;
+  use std::ops::Deref;
+
+  struct Dealloc(*mut libc::c_void);
+
+  impl Drop for Dealloc {
+    fn drop(&mut self) {
+      unsafe { seccomp_release(self.0) }
+    }
+  }
+
+  impl Deref for Dealloc {
+    type Target = *mut libc::c_void;
+
+    fn deref(&self) -> &Self::Target {
+      &self.0
+    }
+  }
+
+  unsafe {
+    let ctx = seccomp_init(SCMP_ACT_ALLOW);
+    if ctx.is_null() {
+      bail!(Errno::last());
+    }
+
+    let ctx = Dealloc(ctx);
+
+    for perm in &[libc::S_ISUID, libc::S_ISGID] {
+      Errno::result(seccomp_rule_add(
+        *ctx,
+        SCMP_ACT_ERRNO(libc::EPERM as _),
+        libc::SYS_chmod as _,
+        1,
+        scmp_arg_cmp {
+          arg: 1,
+          op: SCMP_CMP_MASKED_EQ,
+          datum_a: *perm as _,
+          datum_b: *perm as _,
+        },
+      ))?;
+
+      Errno::result(seccomp_rule_add(
+        *ctx,
+        SCMP_ACT_ERRNO(libc::EPERM as _),
+        libc::SYS_fchmod as _,
+        1,
+        scmp_arg_cmp {
+          arg: 1,
+          op: SCMP_CMP_MASKED_EQ,
+          datum_a: *perm as _,
+          datum_b: *perm as _,
+        },
+      ))?;
+
+      Errno::result(seccomp_rule_add(
+        *ctx,
+        SCMP_ACT_ERRNO(libc::EPERM as _),
+        libc::SYS_fchmodat as _,
+        1,
+        scmp_arg_cmp {
+          arg: 2,
+          op: SCMP_CMP_MASKED_EQ,
+          datum_a: *perm as _,
+          datum_b: *perm as _,
+        },
+      ))?;
+    }
+
+    Errno::result(seccomp_rule_add(
+      *ctx,
+      SCMP_ACT_ERRNO(libc::ENOTSUP as _),
+      libc::SYS_setxattr as _,
+      0,
+    ))?;
+    Errno::result(seccomp_rule_add(
+      *ctx,
+      SCMP_ACT_ERRNO(libc::ENOTSUP as _),
+      libc::SYS_lsetxattr as _,
+      0,
+    ))?;
+    Errno::result(seccomp_rule_add(
+      *ctx,
+      SCMP_ACT_ERRNO(libc::ENOTSUP as _),
+      libc::SYS_fsetxattr as _,
+      0,
+    ))?;
+
+    Errno::result(seccomp_attr_set(
+      *ctx,
+      scmp_filter_attr::SCMP_FLTATR_CTL_NNP,
+      0,
+    ))?;
+
+    Errno::result(seccomp_load(*ctx))?;
+  }
+
+  Ok(())
+}
+
 struct RunChild<'a> {
   builder_write: RawFd,
   user_ns_read: IpcBytesReceiver,
@@ -671,6 +801,8 @@ fn run_child(
   let fdnull = open("/dev/null", OFlag::O_RDWR, Mode::empty())?;
   dup2(fdnull, libc::STDIN_FILENO)?;
   close(fdnull)?;
+
+  init_seccomp()?;
 
   let contents = user_ns_read.recv()?;
   ensure!(contents == [1], "user namespace initialisation failed");
@@ -800,7 +932,7 @@ fn run_child(
         chmod(chroot_root.join("/dev/ptmx").as_path(), 0o666)?;
       }
       Err(e) => {
-        if e.as_errno() != Some(Errno::EINVAL) {
+        if e != Errno::EINVAL {
           return Err(e.into());
         }
         do_bind("/dev/pts", chroot_root.join("dev/pts"), false)?;
@@ -823,7 +955,7 @@ fn run_child(
   pivot_root(".", "real-root")?;
   chroot(".")?;
   umount2("real-root", MntFlags::MNT_DETACH)?;
-  remove_dir("real-root")?;
+  fs::remove_dir("real-root")?;
 
   setgid(SANDBOX_GID)?;
   setuid(SANDBOX_UID)?;
@@ -865,19 +997,19 @@ fn run_child(
 }
 
 fn rewrite(s: &str, rewrites: &HashMap<String, String>) -> String {
-  let mut s = s.to_string();
+  let mut s = Cow::Borrowed(s);
   for (from, to) in rewrites {
     if from == to {
       continue;
     }
-    s = s.replace(from, to)
+    s = Cow::Owned(s.replace(from, to));
   }
-  s
+  s.into_owned()
 }
 
 pub(super) fn build<S: Store + ?Sized>(
   store: &S,
-  scope: &Scope<'_>,
+  _: &Scope<'_>,
   path: &StorePath,
   drv: &Derivation,
 ) -> Result<()> {
@@ -888,7 +1020,6 @@ pub(super) fn build<S: Store + ?Sized>(
       .find()?
       .ok_or_else(|| anyhow!("no UIDs available for build"))?,
     store,
-    scope,
     drv_path: path,
     drv,
     env: Default::default(),

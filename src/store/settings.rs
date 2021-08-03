@@ -21,6 +21,19 @@ impl Default for SandboxMode {
   }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum BuildMode {
+  Build,
+  Repair,
+  Check,
+}
+
+impl Default for BuildMode {
+  fn default() -> Self {
+    Self::Build
+  }
+}
+
 #[derive(Debug)]
 pub struct Settings {
   build_users_group: String,
@@ -28,6 +41,7 @@ pub struct Settings {
   sandbox_mode: SandboxMode,
   sandbox_build_dir: PathBuf,
   sandbox_paths: HashSet<String>,
+  build_mode: BuildMode,
 }
 
 static SETTINGS: OnceCell<Settings> = OnceCell::new();
@@ -55,6 +69,10 @@ impl Settings {
     self.build_cores
   }
 
+  pub fn build_mode(&self) -> BuildMode {
+    self.build_mode
+  }
+
   pub fn sandbox_build_dir(&self) -> &Path {
     &self.sandbox_build_dir
   }
@@ -72,6 +90,7 @@ impl Default for Settings {
       sandbox_mode: SandboxMode::default(),
       sandbox_build_dir: PathBuf::from("/build"),
       sandbox_paths: maplit::hashset! {},
+      build_mode: BuildMode::default(),
     }
   }
 }

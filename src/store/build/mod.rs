@@ -32,7 +32,7 @@ type DerivationKey = StorePath;
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Worker {
-  queue: DependencyQueue<DerivationKey, String, Derivation>,
+  queue: DependencyQueue<(DerivationKey, String), (), Derivation>,
   active: HashMap<usize, DerivationKey>,
   next_id: usize,
   messages: Arc<Queue<Message>>,
@@ -51,15 +51,22 @@ impl Worker {
     }
   }
 
-  pub fn add_needed(&mut self, path: &DerivationKey) -> Result<()> {
-    if self.queue.dep_map.contains_key(path) {
+  pub fn add_needed_all(&mut self, path: &DerivationKey) -> Result<()> {
+    let drv = self.store.read_derivation(path)?;
+    for out in drv.outputs.keys() {
+      self.add_needed((path.clone(), out.clone()))?;
+    }
+    Ok(())
+  }
+
+  pub fn add_needed(&mut self, path: (DerivationKey, String)) -> Result<()> {
+    if self.queue.dep_map.contains_key(&path) {
       return Ok(());
     }
-    let drv = self.store.read_derivation(path)?;
+    let drv = self.store.read_derivation(&path.0)?;
     let mut deps = vec![];
     for (drv_path, drv_outs) in &drv.input_derivations {
       let input_drv = self.store.read_derivation(drv_path)?;
-      let mut any_missing = false;
       for drv_out in drv_outs {
         let dep_out_path =
           input_drv.outputs[drv_out].get_path(&*self.store, &input_drv.name, drv_out)?;
@@ -68,22 +75,22 @@ impl Worker {
             continue;
           }
         }
-        any_missing = true;
-        deps.push((drv_path.clone(), drv_out.clone()));
-      }
-      if any_missing {
-        self.add_needed(drv_path)?;
+        deps.push(((drv_path.clone(), drv_out.clone()), ()));
       }
     }
 
+    for missing in &deps {
+      self.add_needed(missing.0.clone())?;
+    }
+
     let cost = if drv.is_builtin() { 1 } else { 10 };
-    self.queue.queue(path.clone(), drv, deps, cost);
+    self.queue.queue(path, drv, deps, cost);
 
     Ok(())
   }
 
   fn has_slots(&self) -> bool {
-    self.active.len() < 2
+    self.active.is_empty()
   }
 
   fn try_spawn(&mut self, scope: &Scope) {
@@ -93,7 +100,7 @@ impl Worker {
       }
       match self.queue.dequeue() {
         None => break,
-        Some((path, drv)) => self.spawn(path, drv, scope),
+        Some((path, drv)) => self.spawn(path.0, drv, scope),
       }
     }
   }
@@ -168,7 +175,7 @@ impl Worker {
       Message::Finish(id, outputs, result) => {
         let drv_path = self.active.remove(&id).expect("incorrect ID");
         for out in &outputs {
-          self.queue.finish(&drv_path, out);
+          self.queue.finish(&(drv_path.clone(), out.clone()), &());
         }
         let _ = result?;
         debug!("build finished"; "path" => %drv_path, "outputs" => ?outputs);
