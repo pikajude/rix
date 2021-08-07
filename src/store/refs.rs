@@ -17,20 +17,12 @@ const REF_LEN: usize = 32;
 
 impl Write for RefScanner {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-    self.tail.extend(slice_take(buf, REF_LEN));
+    self.tail.extend(buf.take(REF_LEN));
     search(&self.tail, &mut self.hashes, &mut self.seen);
     search(buf, &mut self.hashes, &mut self.seen);
 
-    let tail_len = if buf.len() <= REF_LEN {
-      buf.len()
-    } else {
-      REF_LEN
-    };
-    let sub_start = if self.tail.len() < REF_LEN - tail_len {
-      0
-    } else {
-      self.tail.len() - (REF_LEN - tail_len)
-    };
+    let tail_len = std::cmp::min(buf.len(), REF_LEN);
+    let sub_start = self.tail.len().saturating_sub(REF_LEN - tail_len);
     self.tail = self.tail.split_off(sub_start);
     self.tail.extend(&buf[buf.len() - tail_len..]);
 
@@ -39,14 +31,6 @@ impl Write for RefScanner {
 
   fn flush(&mut self) -> io::Result<()> {
     Ok(())
-  }
-}
-
-fn slice_take<T>(s: &[T], take: usize) -> &[T] {
-  if take > s.len() {
-    s
-  } else {
-    &s[..take]
   }
 }
 

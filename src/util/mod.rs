@@ -1,9 +1,6 @@
-#[doc(no_inline)]
-pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
-#[doc(no_inline)]
-pub use codespan::{FileId, Files, Span};
-#[doc(no_inline)]
-pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+#[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
+#[doc(no_inline)] pub use codespan::{FileId, Files, Span};
+#[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 pub use cons_list::*;
 use error::Catchable;
@@ -129,5 +126,21 @@ impl<T> Try for NixResult<T> {
 
   fn from_ok(v: Self::Ok) -> Self {
     Self(Ok(v))
+  }
+}
+
+pub trait SliceExt<T> {
+  fn take(&self, n: usize) -> &Self;
+  fn take_mut(&mut self, n: usize) -> &mut Self;
+}
+
+impl<T> SliceExt<T> for [T] {
+  fn take(&self, n: usize) -> &Self {
+    &self[0..std::cmp::min(n, self.len())]
+  }
+
+  fn take_mut(&mut self, n: usize) -> &mut Self {
+    let l = self.len();
+    &mut self[0..std::cmp::min(n, l)]
   }
 }

@@ -599,10 +599,20 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
             self.store.print_store_path(&scratch_outputs[outname]),
           );
 
+          let out_path_mode = stat(&actual_path).with_context(|| {
+            format!(
+              "builder for '{}' failed to produce output path for output '{}' at '{}'",
+              self.store.print_store_path(self.drv_path),
+              outname,
+              actual_path.display()
+            )
+          })?;
+
           debug!(
-            "scanning for references for output '{}' in temp location '{}'",
+            "scanning for references for output '{}' in temp location '{}' with mode {:?}",
             outname,
-            actual_path.display()
+            actual_path.display(),
+            out_path_mode
           );
 
           // TODO: canonicalize

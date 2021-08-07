@@ -198,6 +198,7 @@ pub fn download_file<S: Store + ?Sized>(
 }
 
 pub fn builtin_fetchurl(env: &HashMap<String, String>) -> Result<()> {
+  debug!("executing builder:fetchurl"; "env" => ?env);
   let getenv = |x: &'static str| {
     env
       .get(x)
