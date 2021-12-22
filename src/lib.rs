@@ -5,7 +5,7 @@
 #![feature(termination_trait_lib)]
 #![feature(trait_alias)]
 #![feature(try_blocks)]
-#![feature(try_trait)]
+#![feature(try_trait_v2)]
 
 #[macro_use] extern crate derivative;
 #[macro_use] extern crate derive_more;

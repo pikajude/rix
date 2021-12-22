@@ -382,7 +382,7 @@ impl Eval {
         Scope::Static(a) => do_lookup!(a),
         Scope::Dynamic(d) => {
           if !no_eval {
-            let _ = self.force(pos, &d)?;
+            let _e = self.force(pos, &d)?;
           }
           if let Some(a) = d.read().as_attrs() {
             do_lookup!(a)
@@ -395,7 +395,7 @@ impl Eval {
 
     for d in &env.with {
       if !no_eval {
-        let _ = self.force(pos, &d)?;
+        let _e = self.force(pos, &d)?;
       }
       if let Some(d) = d.try_read() {
         if let Some(a) = d.as_attrs() {

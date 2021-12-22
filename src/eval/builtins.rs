@@ -524,7 +524,7 @@ fn prim_read_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 }
 
 fn prim_seq(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let _ = eval.force(pos, &args[0])?;
+  let _e = eval.force(pos, &args[0])?;
   eval.clone_value(pos, &args[1])
 }
 

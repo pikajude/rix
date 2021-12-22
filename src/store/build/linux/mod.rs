@@ -814,7 +814,9 @@ fn run_child(
 
   init_seccomp()?;
 
-  let contents = user_ns_read.recv()?;
+  let contents = user_ns_read
+    .recv()
+    .map_err(|e| anyhow::anyhow!("{:?}", e))?;
   ensure!(contents == [1], "user namespace initialisation failed");
   drop(user_ns_read);
 

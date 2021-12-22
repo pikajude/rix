@@ -13,9 +13,10 @@ use parking_lot::Mutex;
 pub use pos::*;
 pub use rusqlite::{named_params, params, OptionalExtension as _};
 pub use sqlite::Sqlite;
+use std::convert::Infallible;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::File;
-use std::ops::Try;
+use std::ops::{ControlFlow, FromResidual, Try};
 use std::os::unix::prelude::FromRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Termination;
@@ -113,19 +114,30 @@ impl Termination for NixResult<()> {
 }
 
 impl<T> Try for NixResult<T> {
-  type Error = anyhow::Error;
-  type Ok = T;
+  type Output = T;
+  type Residual = Result<Infallible>;
 
-  fn into_result(self) -> Result<Self::Ok, Self::Error> {
-    self.0
+  fn from_output(output: Self::Output) -> Self {
+    Self(Ok(output))
   }
 
-  fn from_error(v: Self::Error) -> Self {
-    Self(Err(v))
+  fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+    match self.0 {
+      Ok(v) => ControlFlow::Continue(v),
+      Err(e) => ControlFlow::Break(Err(e)),
+    }
   }
+}
 
-  fn from_ok(v: Self::Ok) -> Self {
-    Self(Ok(v))
+impl<T, E> FromResidual<Result<Infallible, E>> for NixResult<T>
+where
+  anyhow::Error: From<E>,
+{
+  fn from_residual(residual: Result<Infallible, E>) -> Self {
+    match residual {
+      Err(e) => Self(Err(anyhow::Error::from(e))),
+      Ok(_) => unreachable!(),
+    }
   }
 }
 
