@@ -20,7 +20,7 @@ fn main() -> NixResult {
       .ok_or_else(|| anyhow!("input is not a derivation"))?
       .v;
 
-    realpath = Path::new(&eval.force_string(Pos::none(), &drvpath)?.s).to_path_buf();
+    realpath = Path::new(&eval.force_string(Pos::none(), drvpath)?.s).to_path_buf();
   }
 
   let drvpath = eval.store.parse_store_path(&realpath)?;

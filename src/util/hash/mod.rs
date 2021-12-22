@@ -46,7 +46,7 @@ impl Hash {
     &self.data[..self.len]
   }
 
-  pub fn hash<S: AsRef<[u8]>>(bytes: S, ty: HashType) -> Self {
+  pub fn new<S: AsRef<[u8]>>(bytes: S, ty: HashType) -> Self {
     let mut c = Context::new(ty);
     c.input(bytes.as_ref());
     c.finish().0
@@ -63,7 +63,7 @@ impl Hash {
     let name = name.as_ref();
     format!(
       "/{}",
-      Self::hash(format!("nix-output:{}", name), HashType::SHA256).encode(Encoding::Base32)
+      Self::new(format!("nix-output:{}", name), HashType::SHA256).encode(Encoding::Base32)
     )
   }
 

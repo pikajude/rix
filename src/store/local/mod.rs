@@ -127,7 +127,7 @@ impl Store for LocalStore {
     refs: &StorePathSet,
     _: Repair,
   ) -> Result<StorePath> {
-    let hash = Hash::hash(contents, HashType::SHA256);
+    let hash = Hash::new(contents, HashType::SHA256);
     let dest_path = self.make_text_path(name, hash, refs)?;
 
     let real_path = self.to_real_path(&dest_path);

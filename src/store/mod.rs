@@ -23,21 +23,11 @@ pub use prelude::{FileIngestionMethod, Repair};
 pub type PathSet = BTreeSet<String>;
 pub type StorePathSet = BTreeSet<StorePath>;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct ClosureOpts {
   pub backwards: bool,
   pub include_outputs: bool,
   pub include_derivers: bool,
-}
-
-impl Default for ClosureOpts {
-  fn default() -> Self {
-    Self {
-      backwards: false,
-      include_outputs: false,
-      include_derivers: false,
-    }
-  }
 }
 
 pub trait Store: Send + Sync {
@@ -98,7 +88,7 @@ pub trait Store: Send + Sync {
       self.store_path().display(),
       name
     );
-    let hash = Hash::hash(&ident, HashType::SHA256).truncate(20);
+    let hash = Hash::new(&ident, HashType::SHA256).truncate(20);
     StorePath::from_parts(hash.as_bytes(), name)
   }
 
@@ -139,7 +129,7 @@ pub trait Store: Send + Sync {
       );
       self.make_store_path(
         "output:out",
-        Hash::hash(
+        Hash::new(
           format!(
             "fixed:out:{prefix}:{hash}:",
             prefix = method.prefix(),
@@ -184,7 +174,7 @@ pub trait Store: Send + Sync {
           let out_hash = output
             .as_fixed()
             .ok_or_else(|| anyhow!("fixed-output derivations must only have fixed outputs"))?;
-          let hash = Hash::hash(
+          let hash = Hash::new(
             format!(
               "fixed:out:{method}:{hash}:{path}",
               method = out_hash.method_algo(),
@@ -227,7 +217,7 @@ pub trait Store: Send + Sync {
       }
     }
 
-    let inner = Hash::hash(
+    let inner = Hash::new(
       derivation
         .print(self, mask_outputs, Some(inputs2))
         .to_string(),
@@ -298,7 +288,7 @@ pub trait Store: Send + Sync {
     contents: &[u8],
     refs: &StorePathSet,
   ) -> Result<StorePath> {
-    self.make_text_path(name, Hash::hash(contents, HashType::SHA256), refs)
+    self.make_text_path(name, Hash::new(contents, HashType::SHA256), refs)
   }
 
   fn add_temp_root(&self, path: &StorePath) -> Result<()>;

@@ -22,7 +22,7 @@ fn parse_str(
   input: &str,
 ) -> Result<Expr> {
   CURRENT_FILE_ID.store(file_id);
-  let h = Hash::hash(input, HashType::MD5);
+  let h = Hash::new(input, HashType::MD5);
   let mut part0 = h.encode(Encoding::Base16);
   let part1 = part0.split_off(2);
   let mut cache_file = PathBuf::new();

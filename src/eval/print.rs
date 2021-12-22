@@ -28,7 +28,7 @@ impl<'e, W: WriteColor> Printer<'e, W> {
     if !self.seen.insert(Arc::as_ptr(value) as _) {
       self
         .writer
-        .set_color(&ColorSpec::default().set_fg(Some(Color::Black)))?;
+        .set_color(ColorSpec::default().set_fg(Some(Color::Black)))?;
       self.writer.write_all(b"...")?;
       self.writer.reset()?;
       return Ok(());
@@ -40,7 +40,7 @@ impl<'e, W: WriteColor> Printer<'e, W> {
       Value::Null => {
         self
           .writer
-          .set_color(&ColorSpec::default().set_fg(Some(Color::Cyan)))?;
+          .set_color(ColorSpec::default().set_fg(Some(Color::Cyan)))?;
         self.writer.write_all(b"null")?;
         self.writer.reset()?;
       }

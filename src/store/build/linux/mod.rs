@@ -89,7 +89,7 @@ struct Build<'a, S: Store + ?Sized> {
 impl<'a, S: Store + ?Sized> Build<'a, S> {
   fn fallback_from_output(&self, output_name: &str) -> Result<StorePath> {
     self.store.make_store_path(
-      &format!("rewrite:{}:name:{}", self.drv_path.to_string(), output_name),
+      &format!("rewrite:{}:name:{}", self.drv_path, output_name),
       Hash::new_allow_empty("", Some(HashType::SHA256))?,
       &output_path_name(&self.drv.name, output_name),
     )
@@ -97,7 +97,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
 
   fn fallback_from_path(&self, path: &StorePath) -> Result<StorePath> {
     self.store.make_store_path(
-      &format!("rewrite:{}:{}", self.drv_path.to_string(), path.to_string()),
+      &format!("rewrite:{}:{}", self.drv_path, path),
       Hash::new_allow_empty("", Some(HashType::SHA256))?,
       path.name(),
     )
@@ -141,7 +141,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
 
     for (key, value) in &self.drv.env {
       if pass_as_file.contains(&**key) {
-        let h = Hash::hash(key, HashType::SHA256);
+        let h = Hash::new(key, HashType::SHA256);
         let filename = format!(".attr-{}", h.encode(Encoding::Base32));
         let filepath = build_tmp_dir.join(&filename);
         fs::write(&filepath, value)?;

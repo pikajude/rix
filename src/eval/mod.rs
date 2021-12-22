@@ -150,7 +150,7 @@ impl Eval {
         env: env2,
         body,
       } => {
-        let new_env = self.defer(*pos, env, &env2)?;
+        let new_env = self.defer(*pos, env, env2)?;
         self.eval(&env.with(new_env), body)
       }
       Expr::Op { bin, pos, lhs, rhs } => self.eval_op(env, *bin, *pos, lhs, rhs),
@@ -213,7 +213,7 @@ impl Eval {
       }
       Expr::Attrs(a) => self.build_attrs(env, a),
       Expr::Assert { pos, cond, body } => {
-        if !self.eval_bool(*pos, env, &cond)? {
+        if !self.eval_bool(*pos, env, cond)? {
           bail!(Catchable::Assert(*pos));
         }
         self.eval(env, body)
@@ -382,7 +382,7 @@ impl Eval {
         Scope::Static(a) => do_lookup!(a),
         Scope::Dynamic(d) => {
           if !no_eval {
-            let _e = self.force(pos, &d)?;
+            let _e = self.force(pos, d)?;
           }
           if let Some(a) = d.read().as_attrs() {
             do_lookup!(a)
@@ -395,7 +395,7 @@ impl Eval {
 
     for d in &env.with {
       if !no_eval {
-        let _e = self.force(pos, &d)?;
+        let _e = self.force(pos, d)?;
       }
       if let Some(d) = d.try_read() {
         if let Some(a) = d.as_attrs() {
@@ -516,7 +516,7 @@ impl Eval {
           if i > 0 {
             s.push(' ');
           }
-          s.push_str(&self.coerce_to_string(pos, &item, context, opts)?);
+          s.push_str(&self.coerce_to_string(pos, item, context, opts)?);
         }
         s
       }
@@ -579,7 +579,7 @@ impl Eval {
       (Value::Null, Value::Null) => true,
 
       (Value::Attrs(a1), Value::Attrs(a2)) => {
-        if Arc::ptr_eq(&a1, &a2) {
+        if Arc::ptr_eq(a1, a2) {
           return Ok(true);
         }
 
