@@ -709,7 +709,17 @@ impl Eval {
         }
 
         if !formals.ellipsis && attrs_used != fs.len() {
-          todo!("called with unused argument")
+          for arg in fs.keys() {
+            if !formals.formals.iter().any(|x| x.name == *arg) {
+              throw!(
+                pos,
+                "{} called with unexpected argument `{}'",
+                lam.name,
+                arg
+              );
+            }
+          }
+          unreachable!()
         }
       }
       LambdaArg::Plain(n) => {

@@ -44,12 +44,53 @@ impl<'e, W: WriteColor> Printer<'e, W> {
         self.writer.write_all(b"null")?;
         self.writer.reset()?;
       }
-      Value::Attrs(a) => write!(
-        self.writer,
-        "{{ {:?} }}",
-        a.keys().map(|x| x.as_ref()).collect::<Vec<_>>()
-      )?,
-      v => todo!("{:?}", std::mem::discriminant(v)),
+      Value::Bool(b) => {
+        self
+          .writer
+          .set_color(ColorSpec::default().set_fg(Some(Color::Cyan)))?;
+        write!(self.writer, "{}", b)?;
+        self.writer.reset()?;
+      }
+      Value::Int(i) => {
+        self
+          .writer
+          .set_color(ColorSpec::default().set_fg(Some(Color::Cyan)))?;
+        write!(self.writer, "{}", i)?;
+        self.writer.reset()?;
+      }
+      Value::List(l) => {
+        write!(self.writer, "[ ")?;
+        for i in l.iter() {
+          self.print(i)?;
+          write!(self.writer, " ")?;
+        }
+        write!(self.writer, "]")?;
+      }
+      Value::Attrs(a) => {
+        write!(self.writer, "{{ ")?;
+        for (key, value) in a.iter() {
+          write!(self.writer, "{} = ", key,)?;
+          self.print(&value.v)?;
+          write!(self.writer, "; ")?;
+        }
+        write!(self.writer, "}}")?
+      }
+      Value::String(s) => write!(self.writer, "{:?}", s.s)?,
+      Value::Path(p) => {
+        self
+          .writer
+          .set_color(ColorSpec::default().set_fg(Some(Color::Green)))?;
+        write!(self.writer, "{}", p.display())?;
+        self.writer.reset()?;
+      }
+      Value::Lambda(_, l) => {
+        self
+          .writer
+          .set_color(ColorSpec::default().set_fg(Some(Color::Blue)))?;
+        write!(self.writer, "«lambda @ {}»", l.pos)?;
+        self.writer.reset()?;
+      }
+      v => todo!("{}", v.typename()),
     }
 
     Ok(())

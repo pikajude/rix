@@ -2,7 +2,7 @@ use super::*;
 use crate::store::DrvName;
 use crossbeam::atomic::AtomicCell;
 use regex::Regex;
-use serde_json::{Serializer, Value as JSON};
+use serde_json::{to_writer, Value as JSON};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
@@ -114,6 +114,7 @@ impl Init {
     self.add_constant("false", Value::Bool(false));
     self.add_constant("null", Value::Null);
 
+    self.add_primop("__mul", 2, prim_mul);
     self.add_primop("__sub", 2, prim_subtract);
     self.add_primop("__lessThan", 2, prim_less_than);
 
@@ -626,6 +627,25 @@ fn prim_subtract(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   })
 }
 
+fn prim_mul(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let v1 = eval.force(pos, &args[0])?;
+  let v2 = eval.force(pos, &args[1])?;
+  numeric_op(
+    &*v1,
+    &*v2,
+    |i1, i2| Value::Int(i1 * i2),
+    |f1, f2| Value::Float(f1 * f2),
+  )
+  .ok_or_else(|| {
+    err!(
+      pos,
+      "cannot multiply {} with {}",
+      v2.typename(),
+      v1.typename()
+    )
+  })
+}
+
 fn prim_to_string(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::String(eval.coerce_new_string(
     pos,
@@ -1040,13 +1060,13 @@ fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 }
 
 fn prim_to_json(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let mut v = Serializer::new(Vec::new());
+  let mut v = Vec::new();
   let mut ctx = PathSet::new();
 
   serialize(eval, &mut v, pos, &args[0], &mut ctx)?;
 
   Ok(Value::String(Str {
-    s: unsafe { String::from_utf8_unchecked(v.into_inner()) },
+    s: unsafe { String::from_utf8_unchecked(v) },
     ctx,
   }))
 }
@@ -1058,18 +1078,45 @@ fn prim_from_json(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 
 fn serialize(
   eval: &Eval,
-  ser: &mut Serializer<Vec<u8>>,
+  ser: &mut Vec<u8>,
   pos: Pos,
   v: &ValueRef,
   ctx: &mut PathSet,
 ) -> Result<()> {
-  use serde::ser::Serializer as _;
-
   match &*eval.force(pos, v)? {
-    Value::Null => ser.serialize_none()?,
+    Value::Null => ser.extend(b"null"),
+    Value::Bool(b) => ser.extend(if *b { &b"true"[..] } else { &b"false"[..] }),
     Value::String(Str { s, ctx: ctx2 }) => {
       ctx.extend(ctx2.iter().cloned());
-      ser.serialize_str(&*s)?;
+      to_writer(ser, &*s)?;
+    }
+    Value::List(l) => {
+      ser.push(b'[');
+      let mut first = true;
+      for item in l.iter() {
+        if first {
+          first = false;
+        } else {
+          ser.push(b',');
+        }
+        serialize(eval, ser, pos, item, ctx)?;
+      }
+      ser.push(b']');
+    }
+    Value::Attrs(a) => {
+      ser.push(b'{');
+      let mut first = true;
+      for (key, _value) in a.iter() {
+        if first {
+          first = false;
+        } else {
+          ser.push(b',');
+        }
+        to_writer(&mut *ser, &key.to_string())?;
+        ser.extend(b":null");
+        // serialize(eval, ser, value.pos, &value.v, ctx)?;
+      }
+      ser.push(b'}');
     }
     v => unimplemented!("toJSON: {}", v.typename()),
   }
