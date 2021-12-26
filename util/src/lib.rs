@@ -1,12 +1,27 @@
+#![feature(
+  assert_matches,
+  pattern,
+  termination_trait_lib,
+  trait_alias,
+  try_trait_v2
+)]
+
+#[macro_use] extern crate derive_more;
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate serde;
+#[macro_use] extern crate slog_scope;
+#[macro_use] extern crate thiserror;
+
 pub use self::cons_list::*;
-pub(crate) use self::error::throw;
 pub use self::error::{LocatedError, LocatedStdError, SomeLocatedError};
 pub use self::hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
 pub use self::nar::PathFilter;
 pub use self::pos::*;
+
 #[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
 #[doc(no_inline)] pub use codespan::{FileId, Files, Span};
 #[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
 use error::Catchable;
 use nix::fcntl::OFlag;
@@ -156,12 +171,10 @@ impl<T> SliceExt<T> for [T] {
   }
 }
 
-pub(crate) mod ident_gen {
+#[doc(hidden)]
+pub mod ident_gen {
   #![allow(clippy::all, dead_code)]
   include!(concat!(env!("OUT_DIR"), "/ident.rs"));
-
-  pub(crate) use ident;
 }
 
-pub(crate) use self::ident_gen::ident;
 pub use self::ident_gen::Ident;

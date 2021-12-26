@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::err;
 use crate::eval::CoerceOpts;
 use crate::util::error::Catchable;
 use crate::util::*;

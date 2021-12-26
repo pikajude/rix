@@ -24,9 +24,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.51"
+version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b26702f315f53b6071259e15dd9d64528213b44d61de1ec926eca7715d62203"
+checksum = "84450d0b4a8bd1ba4144ce8ce718fbc5d071358b1e5384bace6536b3d1f2d5b3"
 
 [[package]]
 name = "arc-swap"
@@ -911,17 +911,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "rix"
+name = "rix-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64",
- "binascii",
  "bincode",
- "cfg-if",
  "codespan",
- "codespan-reporting",
- "crossbeam",
  "derive_more",
  "dirs",
  "enum-as-inner",
@@ -930,13 +925,35 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "lazy_static",
- "libc",
- "nix",
- "once_cell",
  "parking_lot",
  "path_abs",
  "proptest",
  "regex",
+ "rix-util",
+ "serde",
+ "slog-scope",
+ "smallvec",
+ "strum",
+ "thiserror",
+]
+
+[[package]]
+name = "rix-util"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "binascii",
+ "codespan",
+ "codespan-reporting",
+ "crossbeam",
+ "derive_more",
+ "hex",
+ "lazy_static",
+ "nix",
+ "once_cell",
+ "parking_lot",
+ "proptest",
  "rusqlite",
  "rust-crypto",
  "serde",
@@ -945,11 +962,8 @@ dependencies = [
  "slog-scope",
  "slog-stdlog",
  "slog-term",
- "smallvec",
  "string_cache",
  "string_cache_codegen",
- "strum",
- "termcolor",
  "thiserror",
 ]
 
