@@ -38,15 +38,16 @@ impl LocatedError for Catchable {
 #[error("{0}")]
 pub struct SomeLocatedError(pub Box<dyn LocatedError>);
 
-#[macro_export]
 macro_rules! throw {
   ($pos:expr, $e:expr) => {
     return Err($crate::err!($pos, $e))
   };
   ($pos:expr, $l:literal, $($t:tt)+) => {
-    $crate::throw!($pos, format!($l, $($t)+))
+    $crate::util::throw!($pos, format!($l, $($t)+))
   }
 }
+
+pub(crate) use throw;
 
 #[macro_export]
 macro_rules! err {

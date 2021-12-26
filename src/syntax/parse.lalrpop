@@ -184,13 +184,13 @@ expr_op_7: Expr = {
     force_string: false,
     parts: vec![<>.v.0, <>.v.1]
   },
-  S<(<expr_op_7> "-" <expr_op_6>)> => Expr::app2("__sub", <>),
+  S<(<expr_op_7> "-" <expr_op_6>)> => Expr::app2(ident!("__sub"), <>),
   expr_op_6
 }
 
 expr_op_6: Expr = {
-  S<(<expr_op_6> "*" <expr_op_5>)> => Expr::app2("__mul", <>),
-  S<(<expr_op_6> "/" <expr_op_5>)> => Expr::app2("__div", <>),
+  S<(<expr_op_6> "*" <expr_op_5>)> => Expr::app2(ident!("__mul"), <>),
+  S<(<expr_op_6> "/" <expr_op_5>)> => Expr::app2(ident!("__div"), <>),
   expr_op_5
 }
 
@@ -212,7 +212,7 @@ expr_op_3: Expr = {
         Expr::apply(Located {
           pos: <>.pos,
           v: (
-            Expr::Var { pos: <>.pos, name: "__sub".into() },
+            Expr::Var { pos: <>.pos, name: ident!("__sub") },
             Expr::Int { n: 0 },
           )
         }),
@@ -245,13 +245,13 @@ expr_select: Expr = {
   },
   S<(expr_simple S<"or">)> => Expr::apply(Located {
     pos: <>.pos,
-    v: (<>.v.0, Expr::Var { pos: <>.v.1.pos, name: Ident::from("or") })
+    v: (<>.v.0, Expr::Var { pos: <>.v.1.pos, name: ident!("or") })
   }),
   expr_simple
 }
 
 expr_simple: Expr = {
-  S<ID> => if <>.v.as_ref() == "__curPos" {
+  S<ID> => if <>.v == ident!("__curPos") {
     Expr::Pos { pos: <>.pos }
   } else {
     Expr::Var { pos: <>.pos, name: Ident::from(<>.v) }
@@ -278,8 +278,8 @@ expr_simple: Expr = {
         Expr::apply(Located {
           pos: <>.pos,
           v: (
-            Expr::Var { pos: <>.pos, name: "__findFile".into() },
-            Expr::Var { pos: <>.pos, name: "__nixPath".into() }
+            Expr::Var { pos: <>.pos, name: ident!("__findFile") },
+            Expr::Var { pos: <>.pos, name: ident!("__nixPath") }
           )
         }),
         Expr::string(real_path)
@@ -297,7 +297,7 @@ expr_simple: Expr = {
       pos: <>.pos,
       lhs: Arc::new(Expr::Attrs(attrs)),
       def: None,
-      path: vec![Located { pos: <>.pos, v: AttrName::Static(Ident::from("body")) }]
+      path: vec![Located { pos: <>.pos, v: AttrName::Static(ident!("body")) }]
     })
   },
   "rec" <S<("{" <S<binding>*> "}")>> =>? {
@@ -345,7 +345,7 @@ attrpath: AttrPath = {
 
 attr: Located<AttrName> = {
   S<ID> => <>.map(|v|AttrName::Static(v)),
-  S<"or"> => <>.map(|_|AttrName::Static(Ident::from("or"))),
+  S<"or"> => <>.map(|_|AttrName::Static(ident!("or"))),
   S<(quote <string_parts> quote)> => <>.map(|v|AttrName::Dynamic(Arc::new(v))),
   S<("${" <expr> "}")> => <>.map(|v|AttrName::Dynamic(Arc::new(v)))
 }

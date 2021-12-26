@@ -1,4 +1,5 @@
 #![feature(assert_matches)]
+#![feature(get_mut_unchecked)]
 #![feature(pattern)]
 #![feature(termination_trait_lib)]
 #![feature(trait_alias)]

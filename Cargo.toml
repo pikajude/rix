@@ -34,7 +34,8 @@ slog-scope = "4.4.0"
 slog-stdlog = "4.1.0"
 slog-term = "2.8.0"
 smallvec = "1.6.1"
-string_cache = "0.8.1"
+string_cache = "0.8.2"
+strum = { version = "0.23.0", features = ["derive"] }
 termcolor = "1.1.2"
 thiserror = "1.0.26"
 
@@ -44,3 +45,4 @@ proptest = "1.0.0"
 
 [build-dependencies]
 lalrpop = "0.19.6"
+string_cache_codegen = "0.5.1"

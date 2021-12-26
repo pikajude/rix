@@ -6,12 +6,14 @@ use std::fmt;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Arc;
+use strum::EnumDiscriminants;
 
 pub type ExprRef = Arc<Expr>;
 
 type ParseOk = Result<(), Located<UserError>>;
 
-#[derive(Debug, EnumAsInner, Clone, Serialize, Deserialize)]
+#[derive(Debug, EnumAsInner, Clone, Serialize, Deserialize, EnumDiscriminants)]
+#[strum_discriminants(name(ExprType))]
 pub enum Expr {
   Pos {
     pos: Pos,
@@ -104,7 +106,7 @@ impl Expr {
     }
   }
 
-  pub fn app2(name: &str, args: Located<(Self, Self)>) -> Self {
+  pub fn app2(name: Ident, args: Located<(Self, Self)>) -> Self {
     Self::apply(Located {
       pos: args.pos,
       v: (
@@ -113,7 +115,7 @@ impl Expr {
           v: (
             Self::Var {
               pos: args.pos,
-              name: name.into(),
+              name,
             },
             args.v.0,
           ),

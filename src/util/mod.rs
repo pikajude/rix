@@ -1,16 +1,17 @@
+pub use self::cons_list::*;
+pub(crate) use self::error::throw;
+pub use self::error::{LocatedError, LocatedStdError, SomeLocatedError};
+pub use self::hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
+pub use self::nar::PathFilter;
+pub use self::pos::*;
 #[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
 #[doc(no_inline)] pub use codespan::{FileId, Files, Span};
 #[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-pub use cons_list::*;
 use error::Catchable;
-pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
-pub use hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
-pub use nar::PathFilter;
 use nix::fcntl::OFlag;
 use nix::unistd::pipe2;
 use parking_lot::Mutex;
-pub use pos::*;
 pub use rusqlite::{named_params, params, OptionalExtension as _};
 pub use sqlite::Sqlite;
 use std::convert::Infallible;
@@ -45,8 +46,6 @@ impl FILES {
     Ok(())
   }
 }
-
-pub type Ident = string_cache::DefaultAtom;
 
 pub fn show_diagnostic(diag: &Diagnostic<FileId>) -> Result<()> {
   codespan_reporting::term::emit(
@@ -156,3 +155,13 @@ impl<T> SliceExt<T> for [T] {
     &mut self[0..std::cmp::min(n, l)]
   }
 }
+
+pub(crate) mod ident_gen {
+  #![allow(clippy::all, dead_code)]
+  include!(concat!(env!("OUT_DIR"), "/ident.rs"));
+
+  pub(crate) use ident;
+}
+
+pub(crate) use self::ident_gen::ident;
+pub use self::ident_gen::Ident;
