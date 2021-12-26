@@ -1,8 +1,8 @@
-use crate::syntax::UserError;
-use crate::syntax::expr::*;
-use crate::syntax::expr::Bin::*;
-use crate::syntax::lex::Token;
-use crate::syntax::parse::*;
+use crate::UserError;
+use crate::expr::*;
+use crate::expr::Bin::*;
+use crate::lex::Token;
+use crate::parse::*;
 use codespan::{Span, FileId};
 use path_abs::PathAbs;
 use std::path::Path;

@@ -1,2 +1,2 @@
 [workspace]
-members = ["core", "util"]
+members = ["core", "syntax", "util"]

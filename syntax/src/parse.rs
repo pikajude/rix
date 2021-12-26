@@ -1,11 +1,11 @@
 use super::Expr;
-use crate::util::*;
 pub use generated::*;
+use rix_util::*;
 use std::path::PathBuf;
 
 mod generated {
   #![allow(clippy::all)]
-  include!(concat!(env!("OUT_DIR"), "/syntax/parse.rs"));
+  include!(concat!(env!("OUT_DIR"), "/parse.rs"));
 }
 
 fn homedir() -> PathBuf {

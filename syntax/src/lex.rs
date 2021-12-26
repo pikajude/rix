@@ -1,7 +1,7 @@
 use super::UserError;
-use crate::util::*;
 use codespan::{FileId, Span};
 use regex::Regex;
+use rix_util::*;
 use std::num::{ParseFloatError, ParseIntError};
 
 #[derive(Clone, Debug, Display)]

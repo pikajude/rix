@@ -1,0 +1,25 @@
+[package]
+name = "rix-syntax"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.52"
+bincode = "1.3.3"
+codespan = "0.11.1"
+derive_more = "0.99.17"
+dirs = "4.0.0"
+enum-as-inner = "0.3.3"
+itertools = "0.10.3"
+lalrpop-util = "0.19.6"
+lazy_static = "1.4.0"
+path_abs = "0.5.1"
+regex = "1.5.4"
+rix-util = { path = "../util" }
+serde = { version = "1.0.132", features = ["rc", "derive"] }
+slog-scope = "4.4.0"
+strum = { version = "0.23.0", features = ["derive"] }
+thiserror = "1.0.30"
+
+[build-dependencies]
+lalrpop = "0.19.6"

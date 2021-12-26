@@ -914,25 +914,36 @@ dependencies = [
 name = "rix-core"
 version = "0.1.0"
 dependencies = [
+ "enum-as-inner",
+ "hex",
+ "lalrpop",
+ "parking_lot",
+ "proptest",
+ "rix-syntax",
+ "rix-util",
+ "slog-scope",
+ "smallvec",
+]
+
+[[package]]
+name = "rix-syntax"
+version = "0.1.0"
+dependencies = [
  "anyhow",
  "bincode",
  "codespan",
  "derive_more",
  "dirs",
  "enum-as-inner",
- "hex",
  "itertools",
  "lalrpop",
  "lalrpop-util",
  "lazy_static",
- "parking_lot",
  "path_abs",
- "proptest",
  "regex",
  "rix-util",
  "serde",
  "slog-scope",
- "smallvec",
  "strum",
  "thiserror",
 ]
