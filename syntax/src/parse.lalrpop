@@ -159,8 +159,8 @@ expr_op_11: Expr = {
 
 expr_op_10: Expr = {
   S<(<expr_op_10> "<" <expr_op_9>)> => Expr::lt(<>, false),
-  S<(<expr_op_10> "<=" <expr_op_9>)> => Expr::lt(swap(<>), true),
-  S<(<expr_op_10> ">" <expr_op_9>)> => Expr::lt(swap(<>), false),
+  S<(<expr_op_10> "<=" <expr_op_9>)> => Expr::lt(<>.flip(), true),
+  S<(<expr_op_10> ">" <expr_op_9>)> => Expr::lt(<>.flip(), false),
   S<(<expr_op_10> ">=" <expr_op_9>)> => Expr::lt(<>, true),
   expr_op_9
 }

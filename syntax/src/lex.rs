@@ -195,20 +195,20 @@ impl<'a> Iterator for Lexer<'a> {
           _ => unreachable!(),
         });
 
-        token_!(INT, |i: &str| Ok(Token::Int(match i.parse::<i64>() {
-          Ok(i) => i,
-          Err(i) =>
-            return Err(Located {
-              pos: Pos(self.id, Span::new(start as u32, self.at as u32)),
-              v: UserError::Lexer(LexError::InvalidInt(i))
-            }),
-        })));
         token_!(FLOAT, |i: &str| Ok(Token::Float(match i.parse::<f64>() {
           Ok(i) => i,
           Err(i) =>
             return Err(Located {
               pos: Pos(self.id, Span::new(start as u32, self.at as u32)),
               v: UserError::Lexer(LexError::InvalidFloat(i))
+            }),
+        })));
+        token_!(INT, |i: &str| Ok(Token::Int(match i.parse::<i64>() {
+          Ok(i) => i,
+          Err(i) =>
+            return Err(Located {
+              pos: Pos(self.id, Span::new(start as u32, self.at as u32)),
+              v: UserError::Lexer(LexError::InvalidInt(i))
             }),
         })));
 

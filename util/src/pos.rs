@@ -25,6 +25,15 @@ impl<T> Located<T> {
   }
 }
 
+impl<A, B> Located<(A, B)> {
+  pub fn flip(self) -> Located<(B, A)> {
+    Located {
+      pos: self.pos,
+      v: (self.v.1, self.v.0),
+    }
+  }
+}
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Hash)]
 pub struct Pos(pub FileId, pub Span);
 

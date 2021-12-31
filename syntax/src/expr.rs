@@ -87,13 +87,6 @@ pub enum Expr {
   },
 }
 
-pub fn swap<A, B>(x: Located<(A, B)>) -> Located<(B, A)> {
-  Located {
-    pos: x.pos,
-    v: (x.v.1, x.v.0),
-  }
-}
-
 impl Expr {
   pub fn bin(operator: Bin, args: Located<(Self, Self)>) -> Self {
     Self::Op {
@@ -132,7 +125,7 @@ impl Expr {
           v: (
             Self::Var {
               pos: args.pos,
-              name: "__lessThan".into(),
+              name: ident!("__lessThan"),
             },
             args.v.0,
           ),

@@ -40,8 +40,8 @@ impl<T> ConsList<T> {
     self.front.as_ref().map(|x| &x.elem)
   }
 
-  pub fn iter(&self) -> Iter<T> {
-    Iter {
+  pub fn iter(&self) -> ConsIter<T> {
+    ConsIter {
       head: self.front.as_deref(),
       len: self.length,
     }
@@ -92,7 +92,7 @@ impl<T: Debug> Debug for ConsList<T> {
 }
 
 impl<'a, T> IntoIterator for &'a ConsList<T> {
-  type IntoIter = Iter<'a, T>;
+  type IntoIter = ConsIter<'a, T>;
   type Item = &'a T;
 
   fn into_iter(self) -> Self::IntoIter {
@@ -118,12 +118,12 @@ impl<T> Drop for ConsList<T> {
   }
 }
 
-pub struct Iter<'a, T> {
+pub struct ConsIter<'a, T> {
   head: Option<&'a Node<T>>,
   len: usize,
 }
 
-impl<'a, T> Iterator for Iter<'a, T> {
+impl<'a, T> Iterator for ConsIter<'a, T> {
   type Item = &'a T;
 
   fn next(&mut self) -> Option<Self::Item> {
@@ -142,5 +142,5 @@ impl<'a, T> Iterator for Iter<'a, T> {
   }
 }
 
-impl<'a, T> FusedIterator for Iter<'a, T> {}
-impl<'a, T> ExactSizeIterator for Iter<'a, T> {}
+impl<'a, T> FusedIterator for ConsIter<'a, T> {}
+impl<'a, T> ExactSizeIterator for ConsIter<'a, T> {}
