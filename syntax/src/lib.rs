@@ -1,3 +1,10 @@
+#[macro_use] extern crate derive_more;
+#[macro_use] extern crate enum_as_inner;
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate slog_scope;
+#[macro_use] extern crate thiserror;
+extern crate rix_util as util;
+
 use crate::util::*;
 use anyhow::Result;
 use codespan::FileId;

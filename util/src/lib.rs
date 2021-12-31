@@ -1,3 +1,17 @@
+#![feature(
+  try_trait_v2,
+  termination_trait_lib,
+  pattern,
+  assert_matches,
+  trait_alias
+)]
+
+#[macro_use] extern crate derive_more;
+#[macro_use] extern crate lazy_static;
+#[macro_use] extern crate slog_scope;
+#[macro_use] extern crate serde;
+#[macro_use] extern crate thiserror;
+
 #[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
 #[doc(no_inline)] pub use codespan::{FileId, Files, Span};
 #[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
@@ -65,16 +79,15 @@ pub fn break_str<'a, P: Pattern<'a>>(s: &'a str, pattern: P) -> Option<(&'a str,
   Some((&s[..start], &s[end..]))
 }
 
-pub fn cat_paths<P: AsRef<Path>, Q: AsRef<Path>>(lhs: P, rhs: Q) -> PathBuf {
-  let lhs = lhs.as_ref();
-  let rhs = rhs.as_ref();
-  let rhs_rela = rhs.strip_prefix("/").unwrap_or_else(|_| {
-    panic!(
-      "second argument to cat_paths must be absolute but was {}",
-      rhs.display()
-    )
-  });
-  lhs.join(rhs_rela)
+pub trait PathExt {
+  fn append<P: AsRef<Path>>(&self, other: P) -> PathBuf;
+}
+
+impl PathExt for Path {
+  fn append<P: AsRef<Path>>(&self, other: P) -> PathBuf {
+    let other = other.as_ref();
+    self.join(other.strip_prefix("/").unwrap_or(other))
+  }
 }
 
 pub fn pipe() -> Result<(impl std::io::Read, impl std::io::Write)> {

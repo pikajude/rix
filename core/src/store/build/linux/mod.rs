@@ -594,10 +594,8 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         referenceable_paths.extend(scratch_outputs.values());
 
         for outname in self.drv.outputs.keys() {
-          let actual_path = cat_paths(
-            &chroot_root,
-            self.store.print_store_path(&scratch_outputs[outname]),
-          );
+          let actual_path =
+            chroot_root.append(self.store.print_store_path(&scratch_outputs[outname]));
 
           let out_path_mode = stat(&actual_path).with_context(|| {
             format!(
@@ -907,7 +905,7 @@ fn run_child(
     if target.path == Path::new("/proc") {
       continue;
     }
-    do_bind(target.path, cat_paths(chroot_root, source), target.optional)?;
+    do_bind(target.path, chroot_root.append(source), target.optional)?;
   }
 
   let procfs = chroot_root.join("proc");
@@ -958,7 +956,7 @@ fn run_child(
     // libunwind opens /proc/self/exe to resolve symbols. the path it points to
     // normally doesn't exist in the sandbox, so this bind mount makes it accessible
     let real_self = fs::read_link("/proc/self/exe")?;
-    do_bind(&real_self, cat_paths(chroot_root, &real_self), false)?;
+    do_bind(&real_self, chroot_root.append(&real_self), false)?;
   }
 
   unshare(CloneFlags::CLONE_NEWNS)?;

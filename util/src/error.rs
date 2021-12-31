@@ -51,7 +51,7 @@ macro_rules! throw {
 #[macro_export]
 macro_rules! err {
   ($pos:expr, $e:expr) => {
-    $crate::util::LocatedStdError {
+    $crate::LocatedStdError {
       pos: $pos,
       err: $e.into(),
     }

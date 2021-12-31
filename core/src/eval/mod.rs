@@ -2,7 +2,6 @@ use crate::store::{FileIngestionMethod, Repair, Store};
 use crate::syntax::expr::{AttrName, Bin, Lambda, LambdaArg};
 use crate::syntax::Expr;
 use crate::util::*;
-use crate::{err, throw};
 use error::*;
 use parking_lot::*;
 use std::collections::HashMap;
@@ -923,7 +922,7 @@ mod tests {
   #[test]
   fn test_eval() -> NixResult {
     let e = Eval::test();
-    let expr = e.eval_inline("(import <nixpkgs> {}).stdenv.cc")?;
+    let expr = e.eval_inline("(import <nixpkgs> {}).stdenv.cc.outPath")?;
     e.print(&super::vref(expr))?;
 
     ok()
