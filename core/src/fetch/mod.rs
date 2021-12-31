@@ -237,7 +237,7 @@ fn get_str(m: &Map<String, Value>, key: &str) -> Result<String> {
   Ok(
     m.get(key)
       .and_then(|x| x.as_str())
-      .ok_or_else(|| anyhow::anyhow!("attribute `{}' missing from cache item", key))?
+      .ok_or_else(|| anyhow!("attribute `{}' missing from cache item", key))?
       .to_string(),
   )
 }
@@ -245,7 +245,7 @@ fn get_str(m: &Map<String, Value>, key: &str) -> Result<String> {
 fn get_int(m: &Map<String, Value>, key: &str) -> Result<i64> {
   m.get(key)
     .and_then(|x| x.as_i64())
-    .ok_or_else(|| anyhow::anyhow!("attribute `{}' missing from cache item", key))
+    .ok_or_else(|| anyhow!("attribute `{}' missing from cache item", key))
 }
 
 fn matched_etag<'c>(item: &'c CacheItem, tag: &str) -> Option<&'c CacheItem> {

@@ -499,7 +499,7 @@ impl Eval {
         }
       }
       Value::Attrs(a) => {
-        if let Some(x) = a.get(&Ident::from("outPath")) {
+        if let Some(x) = a.get(&ident!("outPath")) {
           return self.coerce_to_string(pos, &x.v, context, opts);
         } else {
           throw!(pos, "cannot coerce an attrset to a string")
@@ -582,8 +582,8 @@ impl Eval {
           return Ok(true);
         }
 
-        if let Some(out1) = a1.get(&Ident::from("outPath")) {
-          if let Some(out2) = a2.get(&Ident::from("outPath")) {
+        if let Some(out1) = a1.get(&ident!("outPath")) {
+          if let Some(out2) = a2.get(&ident!("outPath")) {
             return self.eq_values(pos, &out1.v, &out2.v);
           }
         }
@@ -656,7 +656,7 @@ impl Eval {
         }
       }
       Value::Attrs(aread) => {
-        if let Some(functor) = aread.get(&Ident::from("__functor")) {
+        if let Some(functor) = aread.get(&ident!("__functor")) {
           let v2 = vref(self.call_function(pos, &functor.v, fun)?);
           self.call_function(pos, &v2, arg)
         } else {
@@ -738,9 +738,7 @@ impl Eval {
   }
 
   fn force<'v>(&self, pos: Pos, v: &'v ValueRef) -> Result<RwLockReadGuard<'v, Value>> {
-    let guard = v
-      .try_upgradable_read()
-      .ok_or_else(|| err!(pos, "infinite recursion"))?;
+    let guard = unwrap!(v.try_upgradable_read(), pos, "infinite recursion");
     if guard.needs_eval() {
       let mut guard2 =
         RwLockUpgradableReadGuard::try_upgrade(guard).map_err(|_| err!(pos, "deadlock"))?;
@@ -875,21 +873,21 @@ fn pos_to_value(pos: Pos) -> Result<Value> {
   Ok(Value::Attrs(Arc::new({
     let mut a = Attrs::new();
     a.insert(
-      Ident::from("file"),
+      ident!("file"),
       Located {
         pos,
         v: vref(Value::string(fname.display().to_string())),
       },
     );
     a.insert(
-      Ident::from("line"),
+      ident!("line"),
       Located {
         pos,
         v: vref(Value::Int(line as _)),
       },
     );
     a.insert(
-      Ident::from("column"),
+      ident!("column"),
       Located {
         pos,
         v: vref(Value::Int(col as _)),

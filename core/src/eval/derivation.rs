@@ -10,9 +10,11 @@ fn decode_context(s: &str) -> (&str, &str) {
 pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let drv_attrs = eval.force_attrs(pos, &args[0])?;
 
-  let drv_name = drv_attrs
-    .get(&Ident::from("name"))
-    .ok_or_else(|| err!(pos, "required derivation attribute `name' missing"))?;
+  let drv_name = unwrap!(
+    drv_attrs.get(&ident!("name")),
+    pos,
+    "required derivation attribute `name' missing"
+  );
 
   let drv_name_pos = drv_name.pos;
   let drv_name = eval.force_string_no_context(pos, &drv_name.v)?;
@@ -20,7 +22,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
   /*
   let mut json_object;
 
-  if let Some(s) = drv_attrs.get(&Ident::from("__structuredAttrs")) {
+  if let Some(s) = drv_attrs.get(&ident!("__structuredAttrs")) {
     if eval.force_bool(pos, &s.v)? {
       json_object = JSON::Object(Default::default());
     }
@@ -28,7 +30,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
   */
 
   let mut ignore_nulls = false;
-  if let Some(s) = drv_attrs.get(&Ident::from("__ignoreNulls")) {
+  if let Some(s) = drv_attrs.get(&ident!("__ignoreNulls")) {
     ignore_nulls = eval.force_bool(pos, &s.v)?;
   }
 
@@ -194,9 +196,11 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
       }),
     );
   } else if content_addressed {
-    let ht = output_hash_algo
-      .and_then(|x| x.parse::<HashType>().ok())
-      .ok_or_else(|| err!(drv_name_pos, "outputHashAlgo must be specified"))?;
+    let ht = unwrap!(
+      output_hash_algo.and_then(|x| x.parse::<HashType>().ok()),
+      drv_name_pos,
+      "outputHashAlgo must be specified"
+    );
     for outname in outputs {
       drv.env.insert(outname.clone(), Hash::placeholder(&outname));
       drv

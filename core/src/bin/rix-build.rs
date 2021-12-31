@@ -16,7 +16,7 @@ fn main() -> NixResult {
     let drvpath = &stdenv_drv
       .as_attrs()
       .ok_or_else(|| anyhow!("input is not a derivation"))?
-      .get(&Ident::from("drvPath"))
+      .get(&ident!("drvPath"))
       .ok_or_else(|| anyhow!("input is not a derivation"))?
       .v;
 

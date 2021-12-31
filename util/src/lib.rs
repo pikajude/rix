@@ -60,7 +60,13 @@ impl FILES {
   }
 }
 
-pub type Ident = string_cache::DefaultAtom;
+#[doc(hidden)]
+pub mod ident_gen {
+  #![allow(clippy::all)]
+  include!(concat!(env!("OUT_DIR"), "/ident_gen.rs"));
+}
+
+pub use ident_gen::Ident;
 
 pub fn show_diagnostic(diag: &Diagnostic<FileId>) -> Result<()> {
   codespan_reporting::term::emit(

@@ -30,3 +30,6 @@ thiserror = "1.0.30"
 [dev-dependencies]
 hex = "0.4.3"
 proptest = "1.0.0"
+
+[build-dependencies]
+string_cache_codegen = "0.5.1"

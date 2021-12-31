@@ -388,16 +388,20 @@ fn prim_list_to_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> 
 
   for item in list.iter() {
     let item = eval.force_attrs(pos, item)?;
-    let name = item
-      .get(&Ident::from("name"))
-      .ok_or_else(|| err!(pos, "attribute `name' missing in a call to `listToAttrs'"))?;
+    let name = unwrap!(
+      item.get(&ident!("name")),
+      pos,
+      "attribute `name' missing in a call to `listToAttrs'"
+    );
     let name = Ident::from(&*eval.force_string_no_context(pos, &name.v)?);
     new_attrs.insert(
       name,
-      item
-        .get(&Ident::from("value"))
-        .ok_or_else(|| err!(pos, "attribute `value' missing in a call to `listToAttrs'"))?
-        .clone(),
+      unwrap!(
+        item.get(&ident!("value")),
+        pos,
+        "attribute `value' missing in a call to `listToAttrs'"
+      )
+      .clone(),
     );
   }
 
@@ -480,14 +484,14 @@ fn prim_parse_drv_name(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value>
   let n = DrvName::new(&*eval.force_string_no_context(pos, &args[0])?);
   let mut attrs = Attrs::new();
   attrs.insert(
-    Ident::from("name"),
+    ident!("name"),
     Located {
       pos,
       v: vref(Value::string(n.name)),
     },
   );
   attrs.insert(
-    Ident::from("version"),
+    ident!("version"),
     Located {
       pos,
       v: vref(Value::string(n.version)),
@@ -532,13 +536,17 @@ fn prim_seq(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let attrs = eval.force_attrs(pos, &args[0])?;
 
-  let s = attrs
-    .get(&Ident::from("startSet"))
-    .ok_or_else(|| err!(pos, "attribute `startSet` required"))?;
+  let s = unwrap!(
+    attrs.get(&ident!("startSet")),
+    pos,
+    "attribute `startSet` required"
+  );
 
-  let op = attrs
-    .get(&Ident::from("operator"))
-    .ok_or_else(|| err!(pos, "attribute `operator' required"))?;
+  let op = unwrap!(
+    attrs.get(&ident!("operator")),
+    pos,
+    "attribute `operator' required"
+  );
 
   let start_set = eval.force_list(pos, &s.v)?;
 
@@ -553,16 +561,19 @@ fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
 
   while let Some(ws) = work_set.pop() {
     let e = eval.force_attrs(pos, &ws)?.clone();
-    if let Some(key) = e.get(&Ident::from("key")) {
+    if let Some(key) = e.get(&ident!("key")) {
       let key = eval.clone_value(key.pos, &key.v)?;
       if !done_keys.insert(CompareValues(Cow::Owned(key))) {
         continue;
       }
       res.push(ws.clone());
       let v = eval.call_function(pos, &op.v, &ws)?;
-      let new_values = v
-        .as_list()
-        .ok_or_else(|| err!(pos, "`operator' should return a list, not {}", v.typename()))?;
+      let new_values = unwrap!(
+        v.as_list(),
+        pos,
+        "`operator' should return a list, not {}",
+        v.typename()
+      );
 
       for item in new_values.iter() {
         work_set.push(item.clone());
@@ -575,10 +586,7 @@ fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
 
 fn prim_function_args(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let arg0 = eval.force(pos, &args[0])?;
-  let lam = arg0
-    .as_lambda()
-    .ok_or_else(|| err!(pos, "`functionArgs' requires a function"))?
-    .1;
+  let lam = unwrap!(arg0.as_lambda(), pos, "`functionArgs' requires a function").1;
 
   match &lam.arg {
     LambdaArg::Plain(_) => Ok(Value::Attrs(Arc::new(Attrs::new()))),
@@ -964,9 +972,9 @@ fn prim_try_eval(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   match eval.clone_value(pos, &args[0]) {
     Ok(v) => {
       let mut attrs = Attrs::new();
-      attrs.insert(Ident::from("value"), Located { pos, v: vref(v) });
+      attrs.insert(ident!("value"), Located { pos, v: vref(v) });
       attrs.insert(
-        Ident::from("success"),
+        ident!("success"),
         Located {
           pos,
           v: vref(Value::Bool(true)),
@@ -978,14 +986,14 @@ fn prim_try_eval(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
       Ok(_) => {
         let mut attrs = Attrs::new();
         attrs.insert(
-          Ident::from("value"),
+          ident!("value"),
           Located {
             pos,
             v: vref(Value::Bool(false)),
           },
         );
         attrs.insert(
-          Ident::from("success"),
+          ident!("success"),
           Located {
             pos,
             v: vref(Value::Bool(false)),
@@ -1017,9 +1025,7 @@ fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 
   for entry in &*entries {
     let attrs = eval.force_attrs(pos, entry)?;
-    let path = attrs
-      .get(&Ident::from("path"))
-      .ok_or_else(|| err!(pos, "attribute `path' missing"))?;
+    let path = unwrap!(attrs.get(&ident!("path")), pos, "attribute `path' missing");
     let path = eval.coerce_new_string(
       pos,
       &path.v,
@@ -1028,9 +1034,11 @@ fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
         coerce_more: false,
       },
     )?;
-    let prefix = attrs
-      .get(&Ident::from("prefix"))
-      .ok_or_else(|| err!(pos, "attribute `prefix' missing"))?;
+    let prefix = unwrap!(
+      attrs.get(&ident!("prefix")),
+      pos,
+      "attribute `prefix' missing"
+    );
     let prefix = eval.force_string_no_context(pos, &prefix.v)?;
 
     if search_key == &*prefix {

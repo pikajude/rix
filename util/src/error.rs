@@ -63,6 +63,17 @@ macro_rules! err {
   }
 }
 
+#[macro_export]
+macro_rules! unwrap {
+  ($l:expr, $pos:expr, $e:expr) => {
+    $l.ok_or_else(|| $crate::err!($pos, $e))?
+  };
+
+  ($l:expr, $pos:expr, $msg:literal, $($t:tt)+) => {
+    $crate::unwrap!($l, $pos, format!($msg, $($t)+))
+  }
+}
+
 #[derive(Error, Debug)]
 #[error("{err}")]
 pub struct LocatedStdError {

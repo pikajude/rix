@@ -104,7 +104,7 @@ impl Expr {
     }
   }
 
-  pub fn app2(name: &str, args: Located<(Self, Self)>) -> Self {
+  pub fn app2(name: Ident, args: Located<(Self, Self)>) -> Self {
     Self::apply(Located {
       pos: args.pos,
       v: (
@@ -113,7 +113,7 @@ impl Expr {
           v: (
             Self::Var {
               pos: args.pos,
-              name: name.into(),
+              name,
             },
             args.v.0,
           ),
