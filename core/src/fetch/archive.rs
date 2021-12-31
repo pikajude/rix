@@ -51,7 +51,7 @@ pub fn unpack<P: AsRef<Path>, P1: AsRef<Path>>(path: P, dest: P1) -> Result<()> 
       if stat == ffi::ARCHIVE_EOF {
         break;
       } else if stat == ffi::ARCHIVE_WARN {
-        warn!(
+        crate::util::warn!(
           "{}",
           CStr::from_ptr(ffi::archive_error_string(archive)).to_string_lossy()
         );

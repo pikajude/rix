@@ -29,7 +29,7 @@ enum Message {
 
 type DerivationKey = StorePath;
 
-#[derive(Derivative)]
+#[derive(derivative::Derivative)]
 #[derivative(Debug)]
 pub struct Worker {
   queue: DependencyQueue<(DerivationKey, String), (), Derivation>,

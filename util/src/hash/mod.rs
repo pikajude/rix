@@ -233,7 +233,7 @@ fn len_base64(size: usize) -> usize {
   ((4 * size / 3) + 3) & !3
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Display, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, derive_more::Display, Hash)]
 pub enum HashType {
   #[display(fmt = "md5")]
   MD5,

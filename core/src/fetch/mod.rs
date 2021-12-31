@@ -29,13 +29,13 @@ pub struct DownloadedPath {
   pub real_path: PathBuf,
 }
 
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 struct FileInfo<'s> {
   etag: Option<&'s str>,
   url: &'s str,
 }
 
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 struct TarballInfo<'s> {
   etag: Option<&'s str>,
   #[serde(rename = "lastModified")]

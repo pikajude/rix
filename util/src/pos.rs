@@ -3,7 +3,7 @@ use crossbeam::atomic::AtomicCell;
 use serde::de::{Deserialize, Error, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Located<T> {
   pub pos: Pos,
   pub v: T,

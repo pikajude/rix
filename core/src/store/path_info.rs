@@ -3,7 +3,7 @@ use std::time::SystemTime;
 use super::prelude::*;
 use super::StorePathSet;
 
-#[derive(Derivative)]
+#[derive(derivative::Derivative)]
 #[derivative(Debug)]
 pub struct ValidPathInfo {
   pub path: StorePath,

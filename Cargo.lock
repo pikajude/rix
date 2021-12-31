@@ -1264,6 +1264,7 @@ dependencies = [
  "codespan-reporting",
  "crossbeam",
  "derive_more",
+ "enum-as-inner",
  "hex",
  "lazy_static",
  "nix",

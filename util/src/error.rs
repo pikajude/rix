@@ -2,6 +2,7 @@ use super::Pos;
 use codespan::FileId;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use std::error::Error;
+use thiserror::Error;
 
 pub trait LocatedError: Error + Sync + Send {
   fn erased(self) -> anyhow::Error

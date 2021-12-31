@@ -2,7 +2,6 @@ use super::*;
 use nix::fcntl::{flock, FlockArg};
 use nix::unistd::getpid;
 use rix_util::hash::HashResult;
-use slog_scope::*;
 use std::fs::{File, OpenOptions};
 use std::os::unix::prelude::AsRawFd;
 use std::time::{Duration, SystemTime};

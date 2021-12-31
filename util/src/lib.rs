@@ -6,27 +6,27 @@
   trait_alias
 )]
 
-#[macro_use] extern crate derive_more;
-#[macro_use] extern crate lazy_static;
-#[macro_use] extern crate slog_scope;
-#[macro_use] extern crate serde;
-#[macro_use] extern crate thiserror;
-
-#[doc(no_inline)] pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
-#[doc(no_inline)] pub use codespan::{FileId, Files, Span};
-#[doc(no_inline)] pub use codespan_reporting::diagnostic::{Diagnostic, Label};
+pub use self::cons_list::*;
+pub use self::error::{LocatedError, LocatedStdError, SomeLocatedError};
+pub use self::hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
+pub use self::nar::PathFilter;
+pub use self::pos::*;
+pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
+pub use codespan::{FileId, Files, Span};
+pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-pub use cons_list::*;
-use error::Catchable;
-pub use error::{LocatedError, LocatedStdError, SomeLocatedError};
-pub use hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
-pub use nar::PathFilter;
+pub use derive_more::{Deref, Display};
+pub use enum_as_inner::EnumAsInner;
+pub use lazy_static::lazy_static;
+pub use rusqlite::{named_params, params, OptionalExtension as _};
+pub use slog_scope::{debug, error, info, trace, warn};
+pub use sqlite::Sqlite;
+pub use thiserror::Error;
+
+use self::error::Catchable;
 use nix::fcntl::OFlag;
 use nix::unistd::pipe2;
 use parking_lot::Mutex;
-pub use pos::*;
-pub use rusqlite::{named_params, params, OptionalExtension as _};
-pub use sqlite::Sqlite;
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::File;
