@@ -19,6 +19,7 @@ pub use derive_more::{Deref, Display};
 pub use enum_as_inner::EnumAsInner;
 pub use lazy_static::lazy_static;
 pub use rusqlite::{named_params, params, OptionalExtension as _};
+pub use serde::{Deserialize, Serialize};
 pub use slog_scope::{debug, error, info, trace, warn};
 pub use sqlite::Sqlite;
 pub use thiserror::Error;
