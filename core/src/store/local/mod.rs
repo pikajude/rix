@@ -1,6 +1,7 @@
 use super::*;
 use nix::fcntl::{flock, FlockArg};
 use nix::unistd::getpid;
+use rix_util::hash::HashResult;
 use slog_scope::*;
 use std::fs::{File, OpenOptions};
 use std::os::unix::prelude::AsRawFd;
@@ -196,7 +197,10 @@ impl Store for LocalStore {
 
       nar::restore_path(&real_path, combined)?;
 
-      let (_, hash_result, hash_len) = nar_hasher.finish();
+      let HashResult {
+        hash: hash_result,
+        len: hash_len,
+      } = nar_hasher.finish().1;
 
       if hash_result != path_info.nar_hash {
         bail!(
@@ -243,7 +247,7 @@ impl Store for LocalStore {
       std::io::copy(&mut hashing_source, &mut new_file)?;
     }
 
-    let (_, hash, size) = hash_sink.finish();
+    let HashResult { hash, len: size } = hash_sink.finish().1;
 
     let dst_path = self.make_fixed_output_path(method, hash, name, &Default::default(), false)?;
 

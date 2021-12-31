@@ -11,7 +11,7 @@ use crate::fetch::builtin_fetchurl;
 use crate::store::derivation::output_path_name;
 use crate::store::lock::{UserLock, UserLocker};
 use crate::store::settings::{settings, BuildMode, SandboxMode};
-use crate::store::StorePathSet;
+use crate::store::{StorePathSet, ValidPathInfo};
 mod sys_ext;
 
 use anyhow::Error;
@@ -32,6 +32,7 @@ use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::*;
 use nix::NixPath;
 use parking_lot::Once;
+use rix_util::hash::HashResult;
 use rlimit::Resource;
 
 const SANDBOX_UID: Uid = Uid::from_raw(1000);
@@ -587,6 +588,10 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
           debug!("sandbox setup: {}", line.trim_end());
         }
 
+        debug!("builder process for {} finished", self.drv_path);
+
+        let mut infos = HashMap::new();
+
         // at this point, builder terminated without throwing an error, so assume the
         // build succeeded
         let mut referenceable_paths = HashSet::new();
@@ -594,8 +599,17 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         referenceable_paths.extend(scratch_outputs.values());
 
         for outname in self.drv.outputs.keys() {
-          let actual_path =
-            chroot_root.append(self.store.print_store_path(&scratch_outputs[outname]));
+          let path = self.drv.outputs[outname].path(self.store, &self.drv.name, outname)?;
+
+          let mut actual_path = chroot_root.append(self.store.to_real_path(&path));
+
+          debug!("actual path: {}", actual_path.display());
+
+          if actual_path.exists() {
+            let dest_path = self.store.to_real_path(&scratch_outputs[outname]);
+            std::fs::rename(&actual_path, &dest_path)?;
+            actual_path = dest_path;
+          }
 
           let out_path_mode = stat(&actual_path).with_context(|| {
             format!(
@@ -606,6 +620,8 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
             )
           })?;
 
+          // TODO: canonicalize
+
           debug!(
             "scanning for references for output '{}' in temp location '{}' with mode {:?}",
             outname,
@@ -613,13 +629,45 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
             out_path_mode
           );
 
-          // TODO: canonicalize
-
-          let _found = crate::store::refs::scan_for_references(
+          let (
+            HashResult {
+              hash: nar_hash,
+              len: nar_size,
+            },
+            references,
+          ) = crate::store::refs::scan_for_references(
             &actual_path,
             referenceable_paths.iter().copied(),
           )?;
+
+          for p in &self.input_paths {
+            if references.contains(&p) {
+              debug!("referenced input: {}", p)
+            } else {
+              debug!("unreferenced input: {}", p)
+            }
+          }
+
+          infos.insert(
+            outname.clone(),
+            ValidPathInfo {
+              path: path.into_owned(),
+              deriver: Some(self.drv_path.clone()),
+              nar_hash,
+              nar_size: Some(nar_size),
+              refs: references.into_iter().cloned().collect(),
+              registration_time: None,
+              ultimate: true,
+              id: 0,
+            },
+          );
         }
+
+        // TODO: apply output checks
+
+        self
+          .store
+          .register_valid_paths(infos.into_values().collect())?;
 
         Ok(())
       }

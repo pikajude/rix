@@ -11,7 +11,7 @@ mod context;
 mod sink;
 
 pub use context::Context;
-pub use sink::Sink;
+pub use sink::{HashResult, Sink};
 
 #[derive(Clone, Copy)]
 pub struct Hash {
@@ -55,7 +55,7 @@ impl Hash {
   pub fn hash_file<P: AsRef<Path>>(path: P, ty: HashType) -> Result<(Self, usize)> {
     let mut ctx = Sink::new(ty, std::io::sink());
     std::io::copy(&mut File::open(path)?, &mut ctx)?;
-    let (_, hash, len) = ctx.finish();
+    let (_, HashResult { hash, len }) = ctx.finish();
     Ok((hash, len))
   }
 

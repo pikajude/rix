@@ -2,21 +2,36 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::Path;
 
+use rix_util::hash::HashResult;
+
 use crate::util::base32::IS_BASE32;
 
 use super::prelude::*;
 
-#[derive(Default)]
 struct RefScanner {
   hashes: HashSet<Vec<u8>>,
   seen: HashSet<Vec<u8>>,
+  hash_sink: HashSink<std::io::Sink>,
   tail: Vec<u8>,
+}
+
+impl Default for RefScanner {
+  fn default() -> Self {
+    Self {
+      hashes: Default::default(),
+      seen: Default::default(),
+      tail: Default::default(),
+      hash_sink: HashSink::new(HashType::SHA256, std::io::sink()),
+    }
+  }
 }
 
 const REF_LEN: usize = 32;
 
 impl Write for RefScanner {
   fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    self.hash_sink.write_all(buf)?;
+
     self.tail.extend(buf.take(REF_LEN));
     search(&self.tail, &mut self.hashes, &mut self.seen);
     search(buf, &mut self.hashes, &mut self.seen);
@@ -68,7 +83,7 @@ fn search(data: &[u8], hashes: &mut HashSet<Vec<u8>>, seen: &mut HashSet<Vec<u8>
 pub fn scan_for_references<'a, P: AsRef<Path>, I: Iterator<Item = &'a StorePath>>(
   path: P,
   refs: I,
-) -> Result<Vec<&'a StorePath>> {
+) -> Result<(HashResult, Vec<&'a StorePath>)> {
   let mut s = RefScanner::default();
   let mut back_map = HashMap::new();
 
@@ -84,5 +99,5 @@ pub fn scan_for_references<'a, P: AsRef<Path>, I: Iterator<Item = &'a StorePath>
     found.push(back_map.remove(&path).expect("item missing from back map"));
   }
 
-  Ok(found)
+  Ok((s.hash_sink.finish().1, found))
 }

@@ -2,6 +2,12 @@ use super::{Context, Hash, HashType, Result};
 use crypto::digest::Digest;
 use std::io::{self, Seek, SeekFrom, Write};
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct HashResult {
+  pub hash: Hash,
+  pub len: usize,
+}
+
 pub struct Sink<W> {
   c: Context,
   writer: W,
@@ -15,9 +21,9 @@ impl<W> Sink<W> {
     }
   }
 
-  pub fn finish(mut self) -> (W, Hash, usize) {
+  pub fn finish(mut self) -> (W, HashResult) {
     let (hash, len) = self.c.finish();
-    (self.writer, hash, len)
+    (self.writer, HashResult { hash, len })
   }
 }
 

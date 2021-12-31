@@ -11,7 +11,7 @@ fn main() -> NixResult {
   let eval = Eval::new(Arc::new(LocalStore::new()?));
   let mut realpath = PathBuf::from("/rix/store/xj18wv1765ns1wkb4fmmyx54lhm376vw-stdenv-linux.drv");
   if !realpath.exists() {
-    let stdenv_drv = eval.eval_inline("with import <nixpkgs> {}; stdenv")?;
+    let stdenv_drv = eval.eval_inline("with import <nixpkgs> {}; stdenv.cc")?;
 
     let drvpath = &stdenv_drv
       .as_attrs()
