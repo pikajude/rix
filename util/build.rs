@@ -6,6 +6,7 @@ use std::path::Path;
 use string_cache_codegen::AtomType;
 
 static IDENTS: &[&str] = &[
+  "__curPos",
   "__div",
   "__findFile",
   "__functor",

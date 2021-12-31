@@ -251,7 +251,7 @@ expr_select: Expr = {
 }
 
 expr_simple: Expr = {
-  S<ID> => if <>.v.as_ref() == "__curPos" {
+  S<ID> => if <>.v == ident!("__curPos") {
     Expr::Pos { pos: <>.pos }
   } else {
     Expr::Var { pos: <>.pos, name: Ident::from(<>.v) }
