@@ -528,6 +528,16 @@ fn prim_read_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::string(contents))
 }
 
+#[test]
+fn test_read_file() -> Result<()> {
+  use std::io::Write;
+  let mut t = tempfile::NamedTempFile::new()?;
+  t.write_all(&[0xCF])?;
+
+  Eval::test().assert_err(format!("builtins.readFile {}", t.path().display()));
+  Ok(())
+}
+
 fn prim_seq(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let _e = eval.force(pos, &args[0])?;
   eval.clone_value(pos, &args[1])
@@ -732,8 +742,7 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
   while p <= haystack.len() {
     let mut found = false;
 
-    for (ix, from) in from_list.iter().enumerate() {
-      let to = &to_list[ix];
+    for (from, to) in from_list.iter().zip(to_list.iter()) {
       if haystack[p..].starts_with(&from.s) {
         found = true;
         output.push_str(&to.s);
@@ -750,10 +759,15 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
       }
     }
     if !found {
-      if p < haystack.len() {
-        output.push(haystack.as_bytes()[p] as char);
+      match haystack[p..].chars().next() {
+        Some(n) => {
+          output.push(n);
+          p += n.len_utf8();
+        }
+        None => {
+          p += 1;
+        }
       }
-      p += 1;
     }
   }
 
@@ -764,13 +778,17 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
 fn test_replace_strings() -> NixResult {
   let eval = Eval::test();
 
-  let val = eval.eval_inline(
+  eval.assert(
     r#"
     builtins.replaceStrings ["-" "."] ["_" "_"] "x86_64-unknown-linux-gnu"
+      == "x86_64_unknown_linux_gnu"
   "#,
   )?;
-
-  eprintln!("{:?}", val.as_string());
+  eval.assert(
+    r#"
+    builtins.replaceStrings ["q"] ["e"] "jéff" == "jéff"
+  "#,
+  )?;
 
   ok()
 }

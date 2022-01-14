@@ -915,6 +915,15 @@ mod tests {
       }
       Ok(())
     }
+
+    pub(crate) fn assert_err<I: AsRef<str>>(&self, input: I) {
+      let input = input.as_ref();
+      assert!(
+        self.eval_inline(input).is_err(),
+        "expected evaluation to fail for:\n  {}",
+        input
+      )
+    }
   }
 
   #[test]
