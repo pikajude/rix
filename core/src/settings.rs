@@ -10,14 +10,14 @@ pub enum SandboxMode {
 }
 
 impl Default for SandboxMode {
-  #[cfg(target_os = "linux")]
   fn default() -> Self {
-    Self::On
-  }
-
-  #[cfg(not(target_os = "linux"))]
-  fn default() -> Self {
-    Self::Off
+    cfg_if::cfg_if! {
+      if #[cfg(target_os = "linux")] {
+        Self::On
+      } else {
+        Self::Off
+      }
+    }
   }
 }
 
