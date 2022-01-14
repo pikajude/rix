@@ -1,9 +1,9 @@
-use crossbeam::thread::Scope;
 use rix_store::{Derivation, Store, StorePath};
 use rix_util::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::JoinHandle;
 
 use self::dep_queue::DependencyQueue;
 use self::queue::Queue;
@@ -37,6 +37,7 @@ pub struct Worker {
   active: HashMap<usize, DerivationKey>,
   next_id: usize,
   messages: Arc<Queue<Message>>,
+  handles: Vec<JoinHandle<()>>,
   #[derivative(Debug = "ignore")]
   store: Arc<dyn Store>,
 }
@@ -48,6 +49,7 @@ impl Worker {
       queue: Default::default(),
       active: Default::default(),
       messages: Arc::new(Queue::new(10)),
+      handles: vec![],
       next_id: 1,
     }
   }
@@ -94,19 +96,19 @@ impl Worker {
     self.active.is_empty()
   }
 
-  fn try_spawn(&mut self, scope: &Scope) {
+  fn try_spawn(&mut self) {
     loop {
       if !self.has_slots() {
         break;
       }
       match self.queue.dequeue() {
         None => break,
-        Some((path, drv)) => self.spawn(path.0, drv, scope),
+        Some((path, drv)) => self.spawn(path.0, drv),
       }
     }
   }
 
-  fn spawn(&mut self, path: StorePath, drv: Derivation, scope: &Scope) {
+  fn spawn(&mut self, path: StorePath, drv: Derivation) {
     let id = self.next_id;
     self.next_id += 1;
     assert!(self.active.insert(id, path.clone()).is_none());
@@ -114,14 +116,14 @@ impl Worker {
     let store = Arc::clone(&self.store);
     let messages = Arc::clone(&self.messages);
 
-    scope.spawn(move |scope| {
-      let res = block_on(sys::build(&*store, scope, &path, &drv));
+    self.handles.push(tokio::spawn(async move {
+      let res = sys::build(&*store, &path, &drv).await;
       messages.push(Message::Finish(
         id,
         drv.outputs.keys().cloned().collect(),
         res,
       ));
-    });
+    }));
   }
 
   fn wait_for_events(&mut self) -> Vec<Message> {
@@ -143,12 +145,12 @@ impl Worker {
     events
   }
 
-  fn drain(&mut self, scope: &Scope) -> Result<()> {
+  fn drain(&mut self) -> Result<()> {
     let mut err = None;
 
     loop {
       if err.is_none() {
-        self.try_spawn(scope);
+        self.try_spawn();
       }
 
       if self.active.is_empty() {
@@ -197,9 +199,15 @@ impl Worker {
     }
   }
 
-  pub fn build(mut self) -> Result<()> {
+  pub async fn build(mut self) -> Result<()> {
     self.queue.queue_finished();
 
-    crossbeam::thread::scope(|scope| self.drain(scope)).unwrap()
+    let result = self.drain();
+
+    for item in self.handles.drain(..) {
+      item.await?;
+    }
+
+    result
   }
 }

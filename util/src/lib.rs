@@ -33,7 +33,6 @@ use parking_lot::Mutex;
 use std::convert::Infallible;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::fs::File;
-use std::future::Future;
 use std::ops::{ControlFlow, FromResidual, Try};
 use std::os::unix::prelude::FromRawFd;
 use std::path::{Path, PathBuf};
@@ -48,10 +47,6 @@ pub mod logger;
 pub mod nar;
 mod pos;
 pub mod sqlite;
-
-pub fn block_on<O, F: Future<Output = O>>(_fut: F) -> O {
-  unimplemented!("pick a runtime buddy")
-}
 
 lazy_static! {
   #[doc(hidden)]

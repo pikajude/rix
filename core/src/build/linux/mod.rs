@@ -14,7 +14,6 @@ use rix_store::{StorePathSet, ValidPathInfo};
 mod sys_ext;
 
 use anyhow::Error;
-use crossbeam::thread::Scope;
 use ipc_channel::ipc::IpcBytesReceiver;
 use libc::SIGCHLD;
 use linux_personality::{personality, ADDR_NO_RANDOMIZE};
@@ -1103,7 +1102,6 @@ fn rewrite(s: &str, rewrites: &HashMap<String, String>) -> String {
 
 pub(super) async fn build<S: Store + ?Sized>(
   store: &S,
-  _: &Scope<'_>,
   path: &StorePath,
   drv: &Derivation,
 ) -> Result<()> {

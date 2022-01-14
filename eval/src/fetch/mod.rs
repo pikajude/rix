@@ -45,7 +45,7 @@ struct TarballInfo<'s> {
   last_modified: i64,
 }
 
-pub fn download_tarball<S: Store + ?Sized>(
+pub async fn download_tarball<S: Store + ?Sized>(
   store: &S,
   url: &str,
   name: &str,
@@ -71,7 +71,7 @@ pub fn download_tarball<S: Store + ?Sized>(
     }
   }
 
-  let tarball = download_file(store, url, name, immutable)?;
+  let tarball = download_file(store, url, name, immutable).await?;
 
   let unpacked_path;
   let last_modified;
@@ -94,14 +94,16 @@ pub fn download_tarball<S: Store + ?Sized>(
       bail!("multiple top-level members in tarball");
     }
     last_modified = topdir.path().metadata()?.mtime();
-    unpacked_path = block_on(store.add_path_to_store(
-      name,
-      &topdir.path(),
-      FileIngestionMethod::Recursive,
-      HashType::SHA256,
-      &PathFilter::All,
-      Repair::Off,
-    ))?;
+    unpacked_path = store
+      .add_path_to_store(
+        name,
+        &topdir.path(),
+        FileIngestionMethod::Recursive,
+        HashType::SHA256,
+        &PathFilter::All,
+        Repair::Off,
+      )
+      .await?;
   }
 
   let path_info = TarballInfo {
@@ -120,7 +122,7 @@ pub fn download_tarball<S: Store + ?Sized>(
   ))
 }
 
-pub fn download_file<S: Store + ?Sized>(
+pub async fn download_file<S: Store + ?Sized>(
   store: &S,
   url: &str,
   name: &str,
@@ -183,7 +185,9 @@ pub fn download_file<S: Store + ?Sized>(
     let mut path_info = ValidPathInfo::new(store_path.clone(), nar_hash);
     path_info.nar_size = Some(nar_size);
 
-    block_on(store.add_to_store(path_info, Box::new(nar_file), Repair::Off))?;
+    store
+      .add_to_store(path_info, Box::new(nar_file), Repair::Off)
+      .await?;
   }
 
   cache.insert(store, &input_attrs, &inf, &store_path, immutable)?;
@@ -440,11 +444,14 @@ pub async fn fetch(
   warn!("check pure-eval");
 
   let store_path = if unpack {
-    crate::fetch::download_tarball(&*eval.store, &url, &name, expected_hash.is_some())?
+    crate::fetch::download_tarball(&*eval.store, &url, &name, expected_hash.is_some())
+      .await?
       .0
       .path
   } else {
-    crate::fetch::download_file(&*eval.store, &url, &name, expected_hash.is_some())?.path
+    crate::fetch::download_file(&*eval.store, &url, &name, expected_hash.is_some())
+      .await?
+      .path
   };
 
   let real_path = eval.store.to_real_path(&store_path);

@@ -30,7 +30,7 @@ async fn main() -> NixResult {
 
   let mut worker = Worker::new(eval.store.clone());
   worker.add_needed_all(&drvpath)?;
-  worker.build()?;
+  worker.build().await?;
 
   ok()
 }
