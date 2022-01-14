@@ -2,22 +2,25 @@ use super::*;
 
 static B32_CHARS: [u8; 32] = *b"0123456789abcdfghijklmnpqrsvwxyz";
 
-lazy_static! {
-  static ref B32_CHARS_REV: [u8; 256] = {
-    let mut xs = [0xffu8; 256];
-    for (n, c) in B32_CHARS.iter().enumerate() {
-      xs[*c as usize] = n as u8;
-    }
-    xs
-  };
-  pub static ref IS_BASE32: [bool; 256] = {
-    let mut isb32 = [false; 256];
-    for c in B32_CHARS.iter() {
-      isb32[*c as usize] = true;
-    }
-    isb32
-  };
-}
+static B32_CHARS_REV: [u8; 256] = {
+  let mut xs = [0xffu8; 256];
+  let mut i = 0;
+  while i < B32_CHARS.len() {
+    xs[B32_CHARS[i] as usize] = i as u8;
+    i += 1;
+  }
+  xs
+};
+
+pub static IS_BASE32: [bool; 256] = {
+  let mut isb32 = [false; 256];
+  let mut i = 0;
+  while i < B32_CHARS.len() {
+    isb32[B32_CHARS[i] as usize] = true;
+    i += 1;
+  }
+  isb32
+};
 
 pub fn is_base32(c: char) -> bool {
   if c > 'z' {

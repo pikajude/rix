@@ -451,27 +451,14 @@ impl Display for Expr {
         Ok(())
       }
       Expr::Lambda(Lambda { body, arg, .. }) => {
-        write!(f, "(")?;
-        match arg {
-          LambdaArg::Plain(i) => write!(f, "{}", i)?,
-          LambdaArg::Formals {
-            name: Some(x),
-            formals,
-          } => write!(f, "{} @ {}", formals, x)?,
-          LambdaArg::Formals {
-            name: None,
-            formals,
-          } => write!(f, "{}", formals)?,
-        }
-        write!(f, ": {}", body)?;
-        write!(f, ")")
+        write!(f, "({}: {})", arg, body)
       }
       Expr::List(l) => {
         write!(f, "[ ")?;
         for item in l {
           write!(f, "({}) ", item)?;
         }
-        f.write_str("]")
+        write!(f, "]")
       }
       Expr::Attrs(a) => {
         if a.recursive {
@@ -548,6 +535,21 @@ impl Display for Formals {
       write!(f, "}}")
     } else {
       write!(f, " }}")
+    }
+  }
+}
+
+impl Display for LambdaArg {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Plain(i) => i.fmt(f),
+      Self::Formals { name, formals } => {
+        if let Some(x) = name {
+          write!(f, "{} @ {}", formals, x)
+        } else {
+          formals.fmt(f)
+        }
+      }
     }
   }
 }

@@ -6,6 +6,8 @@
   trait_alias
 )]
 
+pub extern crate rusqlite;
+
 pub use self::cons_list::*;
 pub use self::error::{LocatedError, LocatedStdError, SomeLocatedError};
 pub use self::hash::{Context as HashContext, Encoding, Hash, HashType, Sink as HashSink};
@@ -15,7 +17,7 @@ pub use anyhow::{anyhow, bail, ensure, Context as _, Result};
 pub use codespan::{FileId, Files, Span};
 pub use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
-pub use derive_more::{Deref, Display};
+pub use derive_more::{Deref, DerefMut, Display};
 pub use enum_as_inner::EnumAsInner;
 pub use lazy_static::lazy_static;
 pub use rusqlite::{named_params, params, OptionalExtension as _};

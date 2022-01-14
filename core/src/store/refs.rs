@@ -92,7 +92,7 @@ pub fn scan_for_references<'a, P: AsRef<Path>, I: Iterator<Item = &'a StorePath>
     back_map.insert(r.hash_part().into_bytes(), r);
   }
 
-  crate::util::nar::dump_path(path, &mut s, &PathFilter::none())?;
+  crate::util::nar::dump_path(path, &mut s, &PathFilter::All)?;
 
   let mut found = vec![];
   for path in s.seen {

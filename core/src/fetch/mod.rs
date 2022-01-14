@@ -96,7 +96,7 @@ pub fn download_tarball<S: Store + ?Sized>(
       &topdir.path(),
       FileIngestionMethod::Recursive,
       HashType::SHA256,
-      &PathFilter::none(),
+      &PathFilter::All,
       Repair::Off,
     )?;
   }

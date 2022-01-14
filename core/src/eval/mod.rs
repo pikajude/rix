@@ -836,7 +836,7 @@ impl Eval {
       path,
       FileIngestionMethod::Recursive,
       HashType::SHA256,
-      &PathFilter::none(),
+      &PathFilter::All,
       Repair::Off,
     )?;
     let realpath = self.store.print_store_path(&p);

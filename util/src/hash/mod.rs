@@ -2,7 +2,7 @@ use super::*;
 use crypto::digest::Digest;
 use std::fmt::{self, Debug};
 use std::fs::File;
-use std::hash;
+use std::hash::Hash as StdHash;
 use std::ops::Deref;
 use std::path::Path;
 use std::str::FromStr;
@@ -33,7 +33,8 @@ impl Hash {
     len_base64(self.len)
   }
 
-  pub fn size(&self) -> usize {
+  #[allow(clippy::len_without_is_empty)]
+  pub fn len(&self) -> usize {
     self.len
   }
 
@@ -175,6 +176,7 @@ impl Hash {
     }
   }
 
+  #[must_use]
   pub fn truncate(&self, new_size: usize) -> Self {
     if new_size >= self.len {
       return *self;
@@ -199,8 +201,8 @@ impl PartialEq for Hash {
 
 impl Eq for Hash {}
 
-impl hash::Hash for Hash {
-  fn hash<H: hash::Hasher>(&self, state: &mut H) {
+impl StdHash for Hash {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     self.as_bytes().hash(state)
   }
 }

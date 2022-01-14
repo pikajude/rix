@@ -2,6 +2,7 @@ use super::*;
 use nix::fcntl::{flock, FlockArg};
 use nix::unistd::getpid;
 use rix_util::hash::HashResult;
+use rix_util::rusqlite::Connection;
 use std::fs::{File, OpenOptions};
 use std::os::unix::prelude::AsRawFd;
 use std::time::{Duration, SystemTime};
@@ -316,25 +317,19 @@ impl Store for LocalStore {
     }
   }
 
-  fn register_valid_paths(&self, infos: Vec<ValidPathInfo>) -> Result<()> {
+  fn register_valid_paths(&self, mut infos: Vec<ValidPathInfo>) -> Result<()> {
     const REGISTER_VALID: &str = "insert into ValidPaths (path, hash, registrationTime, deriver, \
                                   narSize, ultimate, sigs, ca) values (?, ?, ?, ?, ?, ?, ?, ?)";
     const UPDATE_VALID: &str =
       "update ValidPaths set narSize = ?, hash = ?, ultimate = ?, sigs = ?, ca = ? where id = ?";
 
-    let db = self.db.lock();
+    let mut conn = self.db.lock();
+    let db = conn.transaction()?;
 
-    for info in infos {
+    for info in &mut infos {
       let path = self.print_store_path(&info.path);
 
-      if let Some(current_id) = db
-        .query_row::<i64, _, _>(
-          "select id from ValidPaths where path = ?",
-          params![&path],
-          |r| r.get("id"),
-        )
-        .optional()?
-      {
+      if let Some(current_id) = lookup_path_id(&db, &path)? {
         db.execute(
           UPDATE_VALID,
           params![
@@ -346,6 +341,7 @@ impl Store for LocalStore {
             current_id
           ],
         )?;
+        info.id = current_id;
       } else {
         db.execute(
           REGISTER_VALID,
@@ -355,15 +351,30 @@ impl Store for LocalStore {
             info.registration_time_sql(),
             info
               .deriver
-              .map_or_else(String::new, |d| self.print_store_path(&d)),
+              .as_ref()
+              .map_or_else(String::new, |d| self.print_store_path(d)),
             info.nar_size.unwrap_or_default() as i64,
             info.ultimate,
             "",
             ""
           ],
         )?;
+        info.id = db.last_insert_rowid();
       }
     }
+
+    for info in infos {
+      let referrer = info.id;
+      for r in &info.refs {
+        let reference = lookup_path_id(&db, &self.print_store_path(r))?.expect("bad ref");
+        db.execute(
+          "insert or replace into Refs (referrer, reference) values (?, ?)",
+          params![referrer, reference],
+        )?;
+      }
+    }
+
+    db.commit()?;
 
     Ok(())
   }
@@ -396,4 +407,14 @@ impl Store for LocalStore {
 
     Ok(())
   }
+}
+
+fn lookup_path_id(conn: &Connection, path: &str) -> rix_util::rusqlite::Result<Option<i64>> {
+  conn
+    .query_row::<i64, _, _>(
+      "select id from ValidPaths where path = ?",
+      params![&path],
+      |r| r.get("id"),
+    )
+    .optional()
 }

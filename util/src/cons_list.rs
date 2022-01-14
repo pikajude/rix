@@ -25,6 +25,7 @@ impl<T> ConsList<T> {
     }
   }
 
+  #[must_use]
   pub fn cons(&self, elem: T) -> Self {
     let new_node = Node {
       elem,

@@ -40,13 +40,14 @@ fn parse_str(
     if cache_file.exists() {
       match bincode::deserialize_from(fs::File::open(&cache_file)?) {
         Ok(x) => return Ok(x),
-        Err(_) => {
+        Err(e) => {
+          debug!("cache lookup failure for file {}: {:?}", path.display(), e);
           let _ = fs::remove_file(&cache_file);
         }
       }
+    } else {
+      debug!("cache miss, parsing file {}", path.display());
     }
-
-    debug!("cache miss, parsing file {}", path.display());
   }
 
   let expr = parse::ExprParser::new()

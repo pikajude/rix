@@ -734,7 +734,7 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
 
     for (ix, from) in from_list.iter().enumerate() {
       let to = &to_list[ix];
-      if haystack.starts_with(&from.s) {
+      if haystack[p..].starts_with(&from.s) {
         found = true;
         output.push_str(&to.s);
         if from.s.is_empty() {
@@ -758,6 +758,21 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
   }
 
   Ok(Value::String(Str { s: output, ctx }))
+}
+
+#[test]
+fn test_replace_strings() -> NixResult {
+  let eval = Eval::test();
+
+  let val = eval.eval_inline(
+    r#"
+    builtins.replaceStrings ["-" "."] ["_" "_"] "x86_64-unknown-linux-gnu"
+  "#,
+  )?;
+
+  eprintln!("{:?}", val.as_string());
+
+  ok()
 }
 
 lazy_static! {

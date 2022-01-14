@@ -11,15 +11,23 @@ const VERSION_MAGIC: &str = "nix-archive-1";
 
 pub trait PathFilterFn = Fn(&Path) -> Result<bool>;
 
-pub struct PathFilter(Box<dyn PathFilterFn + Sync>);
+pub enum PathFilter {
+  None,
+  All,
+  Filter(Box<dyn PathFilterFn + Sync>),
+}
 
 impl PathFilter {
   pub fn new<F: PathFilterFn + Sync + 'static>(f: F) -> Self {
-    Self(Box::new(f))
+    Self::Filter(Box::new(f))
   }
 
-  pub fn none() -> Self {
-    Self(Box::new(|_| Ok(true)))
+  pub fn test(&self, path: &Path) -> Result<bool> {
+    match self {
+      Self::None => Ok(false),
+      Self::All => Ok(true),
+      Self::Filter(f) => f(path),
+    }
   }
 }
 
@@ -119,9 +127,9 @@ impl<W: Write> Sink<W> {
   }
 
   fn pad(&mut self, len: usize) -> Result<()> {
+    static PADDING: [u8; 8] = [0; 8];
     if len % 8 > 0 {
-      let zeroes = vec![0u8; 8 - (len % 8)];
-      self.writer.write_all(&zeroes)?;
+      self.writer.write_all(&PADDING[..8 - (len % 8)])?;
     }
     Ok(())
   }
@@ -294,7 +302,7 @@ fn do_dump<W: Write>(sink: &mut Sink<W>, path: &Path, filter: &PathFilter) -> Re
     }
 
     for (hacked_name, real_name) in ordered_files {
-      if (filter.0)(&path.join(&hacked_name))? {
+      if filter.test(&path.join(&hacked_name))? {
         sink.tags(vec!["entry", "(", "name", &*hacked_name, "node"])?;
         do_dump(sink, &path.join(real_name), filter)?;
         sink.tag(")")?;

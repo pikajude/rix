@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::symlink;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
@@ -22,7 +22,7 @@ use linux_personality::{personality, ADDR_NO_RANDOMIZE};
 use nix::errno::Errno;
 use nix::fcntl::{open, OFlag};
 use nix::mount::{mount, umount2, MntFlags, MsFlags};
-use nix::pty::{posix_openpt, ptsname, unlockpt};
+use nix::pty::{posix_openpt, ptsname_r, unlockpt};
 use nix::sched::{unshare, CloneFlags};
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use nix::sys::socket::{socket, AddressFamily, SockFlag, SockType};
@@ -294,6 +294,13 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
       redirected_outputs.insert(fixed_final_path, scratch_path);
     }
 
+    debug!(
+      "path mapping";
+      "input_rewrites" => ?input_rewrites,
+      "redirected_outputs" => ?redirected_outputs,
+      "scratch_outputs" => ?scratch_outputs
+    );
+
     self.env.insert("PATH".into(), "/path-not-set".into());
     self.env.insert("HOME".into(), "/homeless-shelter".into());
     self.env.insert(
@@ -429,10 +436,32 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
     chmod(&chroot_store_dir, 0o1775)?;
     chown(&chroot_store_dir, None, Some(self.build_user.gid()))?;
 
+    for path in &self.input_paths {
+      let r = self.store.to_real_path(path);
+      if r.is_dir() {
+        dirs_in_chroot.insert(
+          r.clone(),
+          ChrootPath {
+            path: r,
+            optional: false,
+          },
+        );
+      } else {
+        let p = chroot_root.append(&r);
+        debug!("hard linking {} to {}", r.display(), p.display());
+        if let Err(e) = std::fs::hard_link(&r, &p) {
+          if e.raw_os_error() != Some(libc::EMLINK) {
+            bail!(e);
+          }
+          std::fs::copy(&r, &p)?;
+        }
+      }
+    }
+
     info!("executing builder {}", self.drv.builder.display());
 
     let builder_read = posix_openpt(OFlag::O_RDWR | OFlag::O_NOCTTY)?;
-    let slave_name = unsafe { ptsname(&builder_read) }?;
+    let slave_name = ptsname_r(&builder_read)?;
 
     chmod(&*slave_name, 0o600)?;
     chown(&*slave_name, Some(self.build_user.uid()), None)?;
@@ -585,7 +614,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
               err_string
             );
           }
-          debug!("sandbox setup: {}", line.trim_end());
+          std::io::stdout().write_all(line.as_bytes())?;
         }
 
         debug!("builder process for {} finished", self.drv_path);
@@ -595,18 +624,24 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         // at this point, builder terminated without throwing an error, so assume the
         // build succeeded
         let mut referenceable_paths = HashSet::new();
-        referenceable_paths.extend(self.input_paths.iter());
+        referenceable_paths.extend(&self.input_paths);
         referenceable_paths.extend(scratch_outputs.values());
 
         for outname in self.drv.outputs.keys() {
           let path = self.drv.outputs[outname].path(self.store, &self.drv.name, outname)?;
+          let path_fs = self.store.to_real_path(&path);
 
-          let mut actual_path = chroot_root.append(self.store.to_real_path(&path));
+          let mut actual_path = chroot_root.append(&path_fs);
 
           debug!("actual path: {}", actual_path.display());
 
           if actual_path.exists() {
-            let dest_path = self.store.to_real_path(&scratch_outputs[outname]);
+            let dest_path = path_fs;
+            debug!(
+              "moving {} to {}",
+              actual_path.display(),
+              dest_path.display()
+            );
             std::fs::rename(&actual_path, &dest_path)?;
             actual_path = dest_path;
           }
@@ -722,6 +757,8 @@ fn chmod<P: NixPath + ?Sized>(path: &P, mode: u32) -> Result<(), nix::Error> {
   )
 }
 
+// TODO: SIGSYS, i'm doing something wrong here
+#[allow(dead_code)]
 fn init_seccomp() -> Result<()> {
   use scmp_compare::SCMP_CMP_MASKED_EQ;
   use seccomp_sys::*;
@@ -858,7 +895,7 @@ fn run_child(
   dup2(fdnull, libc::STDIN_FILENO)?;
   close(fdnull)?;
 
-  init_seccomp()?;
+  // init_seccomp()?;
 
   let contents = user_ns_read
     .recv()
