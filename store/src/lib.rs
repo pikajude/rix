@@ -262,7 +262,7 @@ pub trait Store: Send + Sync {
     Ok(hash)
   }
 
-  fn add_path_to_store(
+  async fn add_path_to_store(
     &self,
     name: &str,
     path: &Path,

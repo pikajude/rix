@@ -6,7 +6,7 @@ use rix_util::hash::HashResult;
 use rix_util::rusqlite::Connection;
 use rix_util::*;
 use std::fs::{File, OpenOptions};
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::os::unix::prelude::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
@@ -144,7 +144,7 @@ impl Store for LocalStore {
     Ok(dest_path)
   }
 
-  fn add_path_to_store(
+  async fn add_path_to_store(
     &self,
     name: &str,
     path: &Path,
@@ -153,25 +153,25 @@ impl Store for LocalStore {
     filter: &PathFilter,
     repair: Repair,
   ) -> Result<StorePath> {
-    crossbeam::scope(|s| {
-      let (read_side, mut write_side) = pipe()?;
+    // TODO: one day, stop loading the entire file into memory
+    let mut buffer = vec![];
 
-      let hdl = s.spawn::<_, Result<()>>(move |_| {
-        if method == FileIngestionMethod::Recursive {
-          nar::dump_path(path, write_side, filter)?;
-        } else {
-          let mut file = File::open(path)?;
-          std::io::copy(&mut file, &mut write_side)?;
-        }
-        Ok(())
-      });
+    if method == FileIngestionMethod::Recursive {
+      nar::dump_path(path, &mut buffer, filter)?;
+    } else {
+      let mut file = File::open(path)?;
+      std::io::copy(&mut file, &mut buffer)?;
+    }
 
-      let store_path =
-        block_on(self.add_dump_to_store(Box::new(read_side), name, method, hash_type, repair))?;
-      hdl.join().unwrap()?;
-      Ok(store_path)
-    })
-    .unwrap()
+    self
+      .add_dump_to_store(
+        Box::new(Cursor::new(buffer)),
+        name,
+        method,
+        hash_type,
+        repair,
+      )
+      .await
   }
 
   fn realise_context(&self, paths: &PathSet) -> Result<()> {

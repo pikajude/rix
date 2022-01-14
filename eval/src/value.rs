@@ -5,7 +5,9 @@ use parking_lot::RwLock;
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 
 pub type ValueRef = Arc<RwLock<Value>>;
@@ -131,7 +133,8 @@ impl Clone for Thunk {
   }
 }
 
-pub type PrimopFn = fn(&Eval, Pos, PrimopArgs) -> Result<Value>;
+pub type PrimopFn =
+  for<'r> fn(&'r Eval, Pos, PrimopArgs) -> Pin<Box<dyn Future<Output = Result<Value>> + 'r>>;
 
 #[derive(Clone, Copy)]
 pub struct Primop {

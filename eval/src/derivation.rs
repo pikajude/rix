@@ -9,8 +9,8 @@ fn decode_context(s: &str) -> (&str, &str) {
   break_str(s, '!').map_or(("", s), |(x, y)| (y, x))
 }
 
-pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let drv_attrs = eval.force_attrs(pos, &args[0])?;
+pub async fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let drv_attrs = eval.force_attrs(pos, &args[0]).await?;
 
   let drv_name = unwrap!(
     drv_attrs.get(&ident!("name")),
@@ -19,7 +19,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
   );
 
   let drv_name_pos = drv_name.pos;
-  let drv_name = eval.force_string_no_context(pos, &drv_name.v)?;
+  let drv_name = eval.force_string_no_context(pos, &drv_name.v).await?;
 
   /*
   let mut json_object;
@@ -33,7 +33,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
 
   let mut ignore_nulls = false;
   if let Some(s) = drv_attrs.get(&ident!("__ignoreNulls")) {
-    ignore_nulls = eval.force_bool(pos, &s.v)?;
+    ignore_nulls = eval.force_bool(pos, &s.v).await?;
   }
 
   let mut drv = Derivation {
@@ -58,34 +58,40 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
     }
     trace!("processing attribute `{}'", key);
 
-    if ignore_nulls && eval.force(pos, value)?.as_null().is_some() {
+    if ignore_nulls && eval.force(pos, value).await?.as_null().is_some() {
       continue;
     }
 
     if key == "__contentAddressed" {
-      content_addressed = eval.force_bool(pos, value)?;
+      content_addressed = eval.force_bool(pos, value).await?;
     } else if key == "args" {
-      for arg in eval.force_list(pos, value)?.iter() {
-        drv.args.push(eval.coerce_to_string(
+      for arg in eval.force_list(pos, value).await?.iter() {
+        drv.args.push(
+          eval
+            .coerce_to_string(
+              drv_name_pos,
+              arg,
+              &mut ctx,
+              CoerceOpts {
+                coerce_more: true,
+                ..Default::default()
+              },
+            )
+            .await?,
+        );
+      }
+    } else {
+      let strval = eval
+        .coerce_to_string(
           drv_name_pos,
-          arg,
+          value,
           &mut ctx,
           CoerceOpts {
             coerce_more: true,
             ..Default::default()
           },
-        )?);
-      }
-    } else {
-      let strval = eval.coerce_to_string(
-        drv_name_pos,
-        value,
-        &mut ctx,
-        CoerceOpts {
-          coerce_more: true,
-          ..Default::default()
-        },
-      )?;
+        )
+        .await?;
 
       if key == "builder" {
         drv.builder = PathBuf::from(&strval);

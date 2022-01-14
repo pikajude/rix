@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use termcolor::*;
 
 impl Eval {
-  pub fn print(&self, value: &ValueRef) -> Result<()> {
+  pub async fn print(&self, value: &ValueRef) -> Result<()> {
     let mut printer = Printer::new(self, StandardStream::stderr(ColorChoice::Auto));
-    printer.print(value)
+    printer.print(value).await
   }
 }
 
@@ -24,7 +24,8 @@ impl<'e, W: WriteColor> Printer<'e, W> {
     }
   }
 
-  fn print(&mut self, value: &ValueRef) -> Result<()> {
+  #[async_recursion(?Send)]
+  async fn print(&mut self, value: &ValueRef) -> Result<()> {
     if !self.seen.insert(Arc::as_ptr(value) as _) {
       self
         .writer
@@ -34,7 +35,7 @@ impl<'e, W: WriteColor> Printer<'e, W> {
       return Ok(());
     }
 
-    let real_value = self.eval.force(Pos::none(), value)?;
+    let real_value = self.eval.force(Pos::none(), value).await?;
 
     match &*real_value {
       Value::Null => {
@@ -61,7 +62,7 @@ impl<'e, W: WriteColor> Printer<'e, W> {
       Value::List(l) => {
         write!(self.writer, "[ ")?;
         for i in l.iter() {
-          self.print(i)?;
+          self.print(i).await?;
           write!(self.writer, " ")?;
         }
         write!(self.writer, "]")?;
@@ -70,7 +71,7 @@ impl<'e, W: WriteColor> Printer<'e, W> {
         write!(self.writer, "{{ ")?;
         for (key, value) in a.iter() {
           write!(self.writer, "{} = ", key,)?;
-          self.print(&value.v)?;
+          self.print(&value.v).await?;
           write!(self.writer, "; ")?;
         }
         write!(self.writer, "}}")?

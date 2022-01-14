@@ -94,14 +94,14 @@ pub fn download_tarball<S: Store + ?Sized>(
       bail!("multiple top-level members in tarball");
     }
     last_modified = topdir.path().metadata()?.mtime();
-    unpacked_path = store.add_path_to_store(
+    unpacked_path = block_on(store.add_path_to_store(
       name,
       &topdir.path(),
       FileIngestionMethod::Recursive,
       HashType::SHA256,
       &PathFilter::All,
       Repair::Off,
-    )?;
+    ))?;
   }
 
   let path_info = TarballInfo {
@@ -377,7 +377,7 @@ fn curl(mut req: RequestInfo) -> Result<CurlDownload> {
   })
 }
 
-pub fn fetch(
+pub async fn fetch(
   eval: &Eval,
   pos: Pos,
   args: PrimopArgs,
@@ -388,17 +388,25 @@ pub fn fetch(
   let mut url = <Option<String>>::None;
   let mut expected_hash = <Option<Hash>>::None;
 
-  if let Some(a) = eval.force(pos, &args[0])?.as_attrs() {
+  if let Some(a) = eval.force(pos, &args[0]).await?.as_attrs() {
     for (key, val) in a.iter() {
       if key == "url" {
-        url = Some(eval.force_string_no_context(val.pos, &val.v)?.to_string());
+        url = Some(
+          eval
+            .force_string_no_context(val.pos, &val.v)
+            .await?
+            .to_string(),
+        );
       } else if key == "sha256" {
         expected_hash = Some(Hash::new_allow_empty(
-          &*eval.force_string_no_context(val.pos, &val.v)?,
+          &*eval.force_string_no_context(val.pos, &val.v).await?,
           Some(HashType::SHA256),
         )?);
       } else if key == "name" {
-        name = eval.force_string_no_context(val.pos, &val.v)?.to_string();
+        name = eval
+          .force_string_no_context(val.pos, &val.v)
+          .await?
+          .to_string();
       } else {
         throw!(val.pos, "unsupported argument `{}' to `{}'", key, fetcher);
       }
@@ -408,7 +416,12 @@ pub fn fetch(
       throw!(pos, "`url' argument required");
     }
   } else {
-    url = Some(eval.force_string_no_context(pos, &args[0])?.to_string());
+    url = Some(
+      eval
+        .force_string_no_context(pos, &args[0])
+        .await?
+        .to_string(),
+    );
   }
 
   let url = url.unwrap();

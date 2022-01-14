@@ -1,4 +1,4 @@
-#![feature(map_first_last, option_zip)]
+#![feature(async_closure, map_first_last, option_zip)]
 
 extern crate rix_syntax as syntax;
 extern crate rix_util as util;
@@ -6,6 +6,7 @@ extern crate rix_util as util;
 use crate::syntax::expr::{AttrName, Bin, Lambda, LambdaArg};
 use crate::syntax::Expr;
 use crate::util::*;
+use async_recursion::async_recursion;
 use error::*;
 use parking_lot::*;
 use rix_store::{FileIngestionMethod, Repair, Store};
@@ -62,7 +63,7 @@ impl Eval {
     ))
   }
 
-  pub fn eval_file<P: AsRef<Path>>(&self, path: P) -> Result<Value> {
+  pub async fn eval_file<P: AsRef<Path>>(&self, path: P) -> Result<Value> {
     let path = path.as_ref();
     let real_path = if path.is_dir() {
       path.join("default.nix")
@@ -72,34 +73,34 @@ impl Eval {
 
     {
       if let Some(f) = self.eval_cache.lock().get(path) {
-        return self.clone_value(Pos::none(), f);
+        return self.clone_value(Pos::none(), f).await;
       }
     }
 
     let expr = Arc::new(crate::syntax::parse_from_file(&real_path)?);
     debug!("evaluating file {}", real_path.display());
-    let val = vref(self.eval(&self.base_env, &expr)?);
+    let val = vref(self.eval(&self.base_env, &expr).await?);
 
     self
       .eval_cache
       .lock()
       .insert(path.to_path_buf(), val.clone());
 
-    self.clone_value(Pos::none(), &val)
+    self.clone_value(Pos::none(), &val).await
   }
 
-  pub fn eval_inline<I: AsRef<str>>(&self, input: I) -> Result<Value> {
+  pub async fn eval_inline<I: AsRef<str>>(&self, input: I) -> Result<Value> {
     let expr = crate::syntax::parse_inline(input.as_ref())?;
-    self.eval(&self.base_env, &expr)
+    self.eval(&self.base_env, &expr).await
   }
 
-  fn defer(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<ValueRef> {
+  async fn defer(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<ValueRef> {
     Ok(match expr {
       Expr::Int { n } => vref(Value::Int(*n)),
       Expr::Float { f } => vref(Value::Float(*f)),
       Expr::String { s } => vref(Value::string(s)),
       Expr::Path { path } => vref(Value::Path(path.into())),
-      Expr::Var { name, .. } => match self.lookup(pos, env, name, true)? {
+      Expr::Var { name, .. } => match self.lookup(pos, env, name, true).await? {
         Some(v) => v,
         None => vref(Value::Thunk(Thunk::new(env, expr))),
       },
@@ -107,14 +108,15 @@ impl Eval {
     })
   }
 
-  fn eval(&self, env: &Env, expr: &Expr) -> Result<Value> {
+  #[async_recursion(?Send)]
+  async fn eval(&self, env: &Env, expr: &Expr) -> Result<Value> {
     match expr {
       Expr::Int { n } => Ok(Value::Int(*n)),
       Expr::Float { f } => Ok(Value::Float(*f)),
       Expr::String { s } => Ok(Value::string(s)),
       Expr::Path { path } => Ok(Value::Path(path.into())),
-      Expr::Var { name, pos } => match self.lookup(*pos, env, name, false)? {
-        Some(v) => self.clone_value(*pos, &v),
+      Expr::Var { name, pos } => match self.lookup(*pos, env, name, false).await? {
+        Some(v) => self.clone_value(*pos, &v).await,
         None => throw!(*pos, "undefined variable `{}'", name),
       },
       Expr::Let { attrs, body } => {
@@ -126,16 +128,18 @@ impl Eval {
             key.clone(),
             Located {
               pos: value.pos,
-              v: self.defer(
-                value.pos,
-                if value.inherited { env } else { &new_env },
-                &value.rhs,
-              )?,
+              v: self
+                .defer(
+                  value.pos,
+                  if value.inherited { env } else { &new_env },
+                  &value.rhs,
+                )
+                .await?,
             },
           );
         }
         *new_scope.write() = Value::Attrs(Arc::new(scope));
-        self.eval(&new_env, body)
+        self.eval(&new_env, body).await
       }
       Expr::If {
         pos,
@@ -143,10 +147,10 @@ impl Eval {
         rhs1,
         rhs2,
       } => {
-        if self.eval_bool(*pos, env, cond)? {
-          self.eval(env, rhs1)
+        if self.eval_bool(*pos, env, cond).await? {
+          self.eval(env, rhs1).await
         } else {
-          self.eval(env, rhs2)
+          self.eval(env, rhs2).await
         }
       }
       Expr::With {
@@ -154,17 +158,17 @@ impl Eval {
         env: env2,
         body,
       } => {
-        let new_env = self.defer(*pos, env, env2)?;
-        self.eval(&env.with(new_env), body)
+        let new_env = self.defer(*pos, env, env2).await?;
+        self.eval(&env.with(new_env), body).await
       }
-      Expr::Op { bin, pos, lhs, rhs } => self.eval_op(env, *bin, *pos, lhs, rhs),
-      Expr::Not { pos, e } => Ok(Value::Bool(!self.eval_bool(*pos, env, e)?)),
+      Expr::Op { bin, pos, lhs, rhs } => self.eval_op(env, *bin, *pos, lhs, rhs).await,
+      Expr::Not { pos, e } => Ok(Value::Bool(!self.eval_bool(*pos, env, e).await?)),
       Expr::HasAttr { lhs, path } => {
-        let mut lhs = vref(self.eval(env, lhs)?);
+        let mut lhs = vref(self.eval(env, lhs).await?);
         for key in path {
-          let lhs_ = self.force(key.pos, &lhs)?;
+          let lhs_ = self.force(key.pos, &lhs).await?;
           if let Some(attrs) = lhs_.as_attrs() {
-            let ident = self.get_name(key.pos, env, &key.v)?;
+            let ident = self.get_name(key.pos, env, &key.v).await?;
             if let Some(val) = attrs.get(&ident) {
               let it = val.v.clone();
               drop(lhs_);
@@ -176,11 +180,15 @@ impl Eval {
         }
         Ok(Value::Bool(true))
       }
-      Expr::Apply { pos, lhs, rhs } => self.call_function(
-        *pos,
-        &self.defer(*pos, env, lhs)?,
-        &self.defer(*pos, env, rhs)?,
-      ),
+      Expr::Apply { pos, lhs, rhs } => {
+        self
+          .call_function(
+            *pos,
+            &self.defer(*pos, env, lhs).await?,
+            &self.defer(*pos, env, rhs).await?,
+          )
+          .await
+      }
       Expr::Lambda(l) => Ok(Value::Lambda(env.clone(), l.clone())),
       Expr::Select {
         pos,
@@ -189,21 +197,21 @@ impl Eval {
         path,
       } => {
         let mut pos = *pos;
-        let mut vtmp = vref(self.eval(env, lhs)?);
+        let mut vtmp = vref(self.eval(env, lhs).await?);
         for i in path {
-          let sym = self.get_name(pos, env, &i.v)?;
+          let sym = self.get_name(pos, env, &i.v).await?;
           if let Some(def) = def {
-            let vtmp2 = self.force(pos, &vtmp)?;
+            let vtmp2 = self.force(pos, &vtmp).await?;
             if let Some(new_value) = vtmp2.as_attrs().and_then(|x| x.get(&sym)).cloned() {
               drop(vtmp2);
               pos = new_value.pos;
               vtmp = new_value.v;
               continue;
             } else {
-              return self.eval(env, def);
+              return self.eval(env, def).await;
             }
           } else {
-            let vtmp2 = self.force_attrs(pos, &vtmp)?;
+            let vtmp2 = self.force_attrs(pos, &vtmp).await?;
             if let Some(val) = vtmp2.get(&sym).cloned() {
               drop(vtmp2);
               pos = val.pos;
@@ -213,19 +221,19 @@ impl Eval {
             }
           }
         }
-        self.clone_value(pos, &vtmp)
+        self.clone_value(pos, &vtmp).await
       }
-      Expr::Attrs(a) => self.build_attrs(env, a),
+      Expr::Attrs(a) => self.build_attrs(env, a).await,
       Expr::Assert { pos, cond, body } => {
-        if !self.eval_bool(*pos, env, cond)? {
+        if !self.eval_bool(*pos, env, cond).await? {
           bail!(Catchable::Assert(*pos));
         }
-        self.eval(env, body)
+        self.eval(env, body).await
       }
       Expr::List(items) => {
         let mut list = vec![];
         for item in items {
-          list.push(vref(self.eval(env, item)?));
+          list.push(vref(self.eval(env, item).await?));
         }
         Ok(Value::List(Arc::new(list)))
       }
@@ -233,35 +241,43 @@ impl Eval {
         pos,
         force_string,
         parts,
-      } => self.concat_strings(*pos, *force_string, parts, env),
+      } => self.concat_strings(*pos, *force_string, parts, env).await,
       e => todo!("{:?}", e),
     }
   }
 
-  fn eval_op(&self, env: &Env, bin: Bin, pos: Pos, lhs: &Expr, rhs: &Expr) -> Result<Value> {
+  async fn eval_op(&self, env: &Env, bin: Bin, pos: Pos, lhs: &Expr, rhs: &Expr) -> Result<Value> {
     match bin {
       Bin::Or => Ok(Value::Bool(
-        self.eval_bool(pos, env, lhs)? || self.eval_bool(pos, env, rhs)?,
+        self.eval_bool(pos, env, lhs).await? || self.eval_bool(pos, env, rhs).await?,
       )),
       Bin::And => Ok(Value::Bool(
-        self.eval_bool(pos, env, lhs)? && self.eval_bool(pos, env, rhs)?,
+        self.eval_bool(pos, env, lhs).await? && self.eval_bool(pos, env, rhs).await?,
       )),
-      Bin::Eq => Ok(Value::Bool(self.eq_values(
-        pos,
-        &self.defer(pos, env, lhs)?,
-        &self.defer(pos, env, rhs)?,
-      )?)),
-      Bin::Neq => Ok(Value::Bool(!self.eq_values(
-        pos,
-        &self.defer(pos, env, lhs)?,
-        &self.defer(pos, env, rhs)?,
-      )?)),
+      Bin::Eq => Ok(Value::Bool(
+        self
+          .eq_values(
+            pos,
+            &self.defer(pos, env, lhs).await?,
+            &self.defer(pos, env, rhs).await?,
+          )
+          .await?,
+      )),
+      Bin::Neq => Ok(Value::Bool(
+        !self
+          .eq_values(
+            pos,
+            &self.defer(pos, env, lhs).await?,
+            &self.defer(pos, env, rhs).await?,
+          )
+          .await?,
+      )),
       Bin::Impl => Ok(Value::Bool(
-        !self.eval_bool(pos, env, lhs)? || self.eval_bool(pos, env, rhs)?,
+        !self.eval_bool(pos, env, lhs).await? || self.eval_bool(pos, env, rhs).await?,
       )),
       Bin::Update => {
-        let mut attrs1 = self.eval_attrs(pos, env, lhs)?;
-        let mut attrs2 = self.eval_attrs(pos, env, rhs)?;
+        let mut attrs1 = self.eval_attrs(pos, env, lhs).await?;
+        let mut attrs2 = self.eval_attrs(pos, env, rhs).await?;
 
         if attrs1.is_empty() {
           Ok(Value::Attrs(attrs2))
@@ -273,8 +289,8 @@ impl Eval {
         }
       }
       Bin::ConcatLists => {
-        let mut list1 = self.eval_list(pos, env, lhs)?;
-        let list2 = self.eval_list(pos, env, rhs)?;
+        let mut list1 = self.eval_list(pos, env, lhs).await?;
+        let list2 = self.eval_list(pos, env, rhs).await?;
 
         Arc::make_mut(&mut list1).extend(list2.iter().cloned());
         Ok(Value::List(list1))
@@ -282,7 +298,7 @@ impl Eval {
     }
   }
 
-  fn concat_strings(
+  async fn concat_strings(
     &self,
     pos: Pos,
     force_string: bool,
@@ -302,7 +318,7 @@ impl Eval {
       .split_first()
       .expect("empty list inside ConcatStrings");
 
-    let part0 = self.eval(env, part0)?;
+    let part0 = self.eval(env, part0).await?;
 
     let should_copy = force_string || part0.as_string().is_some();
 
@@ -310,20 +326,25 @@ impl Eval {
       Value::Int(i) => ConcatTy::Int(i),
       Value::Float(f) => ConcatTy::Float(f),
       Value::Path(p) => ConcatTy::Path(p),
-      v => ConcatTy::String(self.coerce_to_string(
-        pos,
-        &vref(v),
-        &mut ctx,
-        CoerceOpts {
-          coerce_more: false,
-          copy_to_store: should_copy,
-        },
-      )?),
+      v => ConcatTy::String(
+        self
+          .coerce_to_string(
+            pos,
+            &vref(v),
+            &mut ctx,
+            CoerceOpts {
+              coerce_more: false,
+              copy_to_store: should_copy,
+            },
+          )
+          .await?,
+      ),
     };
 
-    let final_ = partrest.iter().try_fold(first, |vtmp, part| {
-      let part = self.eval(env, part)?;
-      Ok(match (vtmp, part) {
+    let mut vtmp = first;
+    for part in partrest.iter() {
+      let part = self.eval(env, part).await?;
+      vtmp = match (vtmp, part) {
         (ConcatTy::Int(i0), Value::Int(i1)) => ConcatTy::Int(i0 + i1),
         (ConcatTy::Int(i0), Value::Float(i1)) => ConcatTy::Float((i0 as f64) + i1),
         (ConcatTy::Int(_), x) => throw!(pos, "cannot add {} to an integer", x.typename()),
@@ -331,15 +352,17 @@ impl Eval {
         (ConcatTy::Float(f0), Value::Float(f1)) => ConcatTy::Float(f0 + f1),
         (ConcatTy::Float(_), x) => throw!(pos, "cannot add {} to a float", x.typename()),
         (ConcatTy::Path(p), x) => {
-          let s = self.coerce_to_string(
-            pos,
-            &vref(x),
-            &mut ctx,
-            CoerceOpts {
-              coerce_more: false,
-              copy_to_store: should_copy,
-            },
-          )?;
+          let s = self
+            .coerce_to_string(
+              pos,
+              &vref(x),
+              &mut ctx,
+              CoerceOpts {
+                coerce_more: false,
+                copy_to_store: should_copy,
+              },
+            )
+            .await?;
           if !ctx.is_empty() {
             throw!(
               pos,
@@ -349,22 +372,24 @@ impl Eval {
           ConcatTy::Path(p.join(s.strip_prefix('/').unwrap_or(&s)))
         }
         (ConcatTy::String(mut s0), x) => {
-          let s = self.coerce_to_string(
-            pos,
-            &vref(x),
-            &mut ctx,
-            CoerceOpts {
-              coerce_more: false,
-              copy_to_store: should_copy,
-            },
-          )?;
+          let s = self
+            .coerce_to_string(
+              pos,
+              &vref(x),
+              &mut ctx,
+              CoerceOpts {
+                coerce_more: false,
+                copy_to_store: should_copy,
+              },
+            )
+            .await?;
           s0.push_str(&s);
           ConcatTy::String(s0)
         }
-      })
-    })?;
+      };
+    }
 
-    Ok(match final_ {
+    Ok(match vtmp {
       ConcatTy::Int(i) => Value::Int(i),
       ConcatTy::Float(f) => Value::Float(f),
       ConcatTy::Path(p) => Value::Path(p),
@@ -372,7 +397,13 @@ impl Eval {
     })
   }
 
-  fn lookup(&self, pos: Pos, env: &Env, var: &Ident, no_eval: bool) -> Result<Option<ValueRef>> {
+  async fn lookup(
+    &self,
+    pos: Pos,
+    env: &Env,
+    var: &Ident,
+    no_eval: bool,
+  ) -> Result<Option<ValueRef>> {
     macro_rules! do_lookup {
       ($attrs:expr) => {{
         if let Some(v) = $attrs.get(var) {
@@ -386,7 +417,7 @@ impl Eval {
         Scope::Static(a) => do_lookup!(a),
         Scope::Dynamic(d) => {
           if !no_eval {
-            let _e = self.force(pos, d)?;
+            let _e = self.force(pos, d).await?;
           }
           if let Some(a) = d.read().as_attrs() {
             do_lookup!(a)
@@ -399,7 +430,7 @@ impl Eval {
 
     for d in &env.with {
       if !no_eval {
-        let _e = self.force(pos, d)?;
+        let _e = self.force(pos, d).await?;
       }
       if let Some(d) = d.try_read() {
         if let Some(a) = d.as_attrs() {
@@ -413,18 +444,18 @@ impl Eval {
     Ok(None)
   }
 
-  fn get_name(&self, pos: Pos, env: &Env, name: &AttrName) -> Result<Ident> {
+  async fn get_name(&self, pos: Pos, env: &Env, name: &AttrName) -> Result<Ident> {
     match name {
       AttrName::Static(e) => Ok(e.clone()),
       AttrName::Dynamic(d) => {
-        let v = vref(self.eval(env, d)?);
-        let s = self.force_string_no_context(pos, &v)?;
+        let v = vref(self.eval(env, d).await?);
+        let s = self.force_string_no_context(pos, &v).await?;
         Ok(Ident::from(&*s))
       }
     }
   }
 
-  fn build_attrs(&self, env: &Env, attrs: &crate::syntax::expr::Attrs) -> Result<Value> {
+  async fn build_attrs(&self, env: &Env, attrs: &crate::syntax::expr::Attrs) -> Result<Value> {
     let mut new_attrs = Attrs::new();
     let mut dynamic_env = env;
     let env2;
@@ -438,7 +469,9 @@ impl Eval {
           k.clone(),
           Located {
             pos: v.pos,
-            v: self.defer(v.pos, if v.inherited { env } else { &env2 }, &v.rhs)?,
+            v: self
+              .defer(v.pos, if v.inherited { env } else { &env2 }, &v.rhs)
+              .await?,
           },
         );
       }
@@ -450,18 +483,18 @@ impl Eval {
           k.clone(),
           Located {
             pos: v.pos,
-            v: self.defer(v.pos, env, &v.rhs)?,
+            v: self.defer(v.pos, env, &v.rhs).await?,
           },
         );
       }
     }
 
     for item in &attrs.dyn_attrs {
-      let name_val = vref(self.eval(dynamic_env, &item.name)?);
-      if self.force(item.pos, &name_val)?.as_null().is_some() {
+      let name_val = vref(self.eval(dynamic_env, &item.name).await?);
+      if self.force(item.pos, &name_val).await?.as_null().is_some() {
         continue;
       }
-      let name = Ident::from(&*self.force_string_no_context(item.pos, &name_val)?);
+      let name = Ident::from(&*self.force_string_no_context(item.pos, &name_val).await?);
       if let Some(old) = new_attrs.get(&name) {
         throw!(
           item.pos,
@@ -474,7 +507,7 @@ impl Eval {
         name,
         Located {
           pos: item.pos,
-          v: self.defer(item.pos, dynamic_env, &item.value)?,
+          v: self.defer(item.pos, dynamic_env, &item.value).await?,
         },
       );
     }
@@ -482,14 +515,15 @@ impl Eval {
     Ok(Value::Attrs(Arc::new(new_attrs)))
   }
 
-  fn coerce_to_string(
+  #[async_recursion(?Send)]
+  async fn coerce_to_string(
     &self,
     pos: Pos,
     v: &ValueRef,
     context: &mut PathSet,
     opts: CoerceOpts,
   ) -> Result<String> {
-    Ok(match &*self.force(pos, v)? {
+    Ok(match &*self.force(pos, v).await? {
       Value::String(Str { ctx: c1, s }) => {
         context.extend(c1.clone());
         s.clone()
@@ -499,14 +533,14 @@ impl Eval {
           .canonicalize()
           .with_context(|| format!("canonicalizing {}", p.display()))?;
         if opts.copy_to_store {
-          self.copy_path_to_store(pos, &p, context)?
+          self.copy_path_to_store(pos, &p, context).await?
         } else {
           p.display().to_string()
         }
       }
       Value::Attrs(a) => {
         if let Some(x) = a.get(&ident!("outPath")) {
-          return self.coerce_to_string(pos, &x.v, context, opts);
+          return self.coerce_to_string(pos, &x.v, context, opts).await;
         } else {
           throw!(pos, "cannot coerce an attrset to a string")
         }
@@ -521,7 +555,7 @@ impl Eval {
           if i > 0 {
             s.push(' ');
           }
-          s.push_str(&self.coerce_to_string(pos, item, context, opts)?);
+          s.push_str(&self.coerce_to_string(pos, item, context, opts).await?);
         }
         s
       }
@@ -529,22 +563,24 @@ impl Eval {
     })
   }
 
-  fn coerce_new_string(&self, pos: Pos, v: &ValueRef, opts: CoerceOpts) -> Result<Str> {
+  async fn coerce_new_string(&self, pos: Pos, v: &ValueRef, opts: CoerceOpts) -> Result<Str> {
     let mut ctx = PathSet::new();
-    let s = self.coerce_to_string(pos, v, &mut ctx, opts)?;
+    let s = self.coerce_to_string(pos, v, &mut ctx, opts).await?;
     Ok(Str { s, ctx })
   }
 
-  fn coerce_to_path(&self, pos: Pos, v: &ValueRef, context: &mut PathSet) -> Result<PathBuf> {
-    let s = self.coerce_to_string(
-      pos,
-      v,
-      context,
-      CoerceOpts {
-        copy_to_store: false,
-        coerce_more: false,
-      },
-    )?;
+  async fn coerce_to_path(&self, pos: Pos, v: &ValueRef, context: &mut PathSet) -> Result<PathBuf> {
+    let s = self
+      .coerce_to_string(
+        pos,
+        v,
+        context,
+        CoerceOpts {
+          copy_to_store: false,
+          coerce_more: false,
+        },
+      )
+      .await?;
     let p = PathBuf::from(s);
     if !p.starts_with("/") {
       throw!(
@@ -556,17 +592,18 @@ impl Eval {
     Ok(p)
   }
 
-  fn clone_value(&self, pos: Pos, v: &ValueRef) -> Result<Value> {
-    Ok(self.force(pos, v)?.clone())
+  async fn clone_value(&self, pos: Pos, v: &ValueRef) -> Result<Value> {
+    Ok(self.force(pos, v).await?.clone())
   }
 
-  fn eq_values(&self, pos: Pos, v1: &ValueRef, v2: &ValueRef) -> Result<bool> {
+  #[async_recursion(?Send)]
+  async fn eq_values(&self, pos: Pos, v1: &ValueRef, v2: &ValueRef) -> Result<bool> {
     if Arc::ptr_eq(v1, v2) {
       return Ok(true);
     }
 
-    let v1 = self.force(pos, v1)?;
-    let v2 = self.force(pos, v2)?;
+    let v1 = self.force(pos, v1).await?;
+    let v2 = self.force(pos, v2).await?;
 
     if let Some(result) = numeric_op(
       &*v1,
@@ -590,7 +627,7 @@ impl Eval {
 
         if let Some(out1) = a1.get(&ident!("outPath")) {
           if let Some(out2) = a2.get(&ident!("outPath")) {
-            return self.eq_values(pos, &out1.v, &out2.v);
+            return self.eq_values(pos, &out1.v, &out2.v).await;
           }
         }
 
@@ -600,7 +637,7 @@ impl Eval {
 
         for (k, v) in a1.iter() {
           if let Some(v2) = a2.get(k) {
-            if !self.eq_values(pos, &v.v, &v2.v)? {
+            if !self.eq_values(pos, &v.v, &v2.v).await? {
               return Ok(false);
             }
           } else {
@@ -616,7 +653,7 @@ impl Eval {
           false
         } else {
           for (i, v) in l1.iter().enumerate() {
-            if !self.eq_values(pos, v, &l2[i])? {
+            if !self.eq_values(pos, v, &l2[i]).await? {
               return Ok(false);
             }
           }
@@ -629,52 +666,53 @@ impl Eval {
     })
   }
 
-  fn eval_bool(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<bool> {
-    match self.eval(env, expr)? {
+  async fn eval_bool(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<bool> {
+    match self.eval(env, expr).await? {
       Value::Bool(b) => Ok(b),
       v => throw!(pos, "expected bool, got `{}'", v.typename()),
     }
   }
 
-  fn eval_list(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<Arc<Vec<ValueRef>>> {
-    Ok(match self.eval(env, expr)? {
+  async fn eval_list(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<Arc<Vec<ValueRef>>> {
+    Ok(match self.eval(env, expr).await? {
       Value::List(a) => a,
       v => throw!(pos, "expected list, got `{}'", v.typename()),
     })
   }
 
-  fn eval_attrs(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<Arc<Attrs>> {
-    Ok(match self.eval(env, expr)? {
+  async fn eval_attrs(&self, pos: Pos, env: &Env, expr: &Expr) -> Result<Arc<Attrs>> {
+    Ok(match self.eval(env, expr).await? {
       Value::Attrs(a) => a,
       v => throw!(pos, "expected attrset, got `{}'", v.typename()),
     })
   }
 
-  fn call_function(&self, pos: Pos, fun: &ValueRef, arg: &ValueRef) -> Result<Value> {
-    match &*self.force(pos, fun)? {
+  #[async_recursion(?Send)]
+  async fn call_function(&self, pos: Pos, fun: &ValueRef, arg: &ValueRef) -> Result<Value> {
+    match &*self.force(pos, fun).await? {
       Value::Primop(op, args) => {
         let mut args = args.clone();
         args.push(arg.clone());
         if args.len() == op.arity as usize {
-          (op.fun)(self, pos, args)
+          (op.fun)(self, pos, args).await
         } else {
           Ok(Value::Primop(*op, args))
         }
       }
       Value::Attrs(aread) => {
         if let Some(functor) = aread.get(&ident!("__functor")) {
-          let v2 = vref(self.call_function(pos, &functor.v, fun)?);
-          self.call_function(pos, &v2, arg)
+          let v2 = vref(self.call_function(pos, &functor.v, fun).await?);
+          self.call_function(pos, &v2, arg).await
         } else {
           throw!(pos, "cannot call an attrset as a function")
         }
       }
-      Value::Lambda(e, lam) => self.call_lambda(pos, e, lam, arg),
+      Value::Lambda(e, lam) => self.call_lambda(pos, e, lam, arg).await,
       v => throw!(pos, "cannot call a {} as a function", v.typename()),
     }
   }
 
-  fn call_lambda(&self, pos: Pos, env: &Env, lam: &Lambda, arg: &ValueRef) -> Result<Value> {
+  async fn call_lambda(&self, pos: Pos, env: &Env, lam: &Lambda, arg: &ValueRef) -> Result<Value> {
     let fn_env_ref = vref(Value::Blackhole);
     let new_env = env.cons(Scope::Dynamic(fn_env_ref.clone()));
 
@@ -682,7 +720,7 @@ impl Eval {
 
     match &lam.arg {
       LambdaArg::Formals { name, formals } => {
-        let fs = self.force_attrs(pos, arg)?;
+        let fs = self.force_attrs(pos, arg).await?;
 
         let mut attrs_used = 0;
 
@@ -701,7 +739,7 @@ impl Eval {
             attrs_used += 1;
             fn_env.insert(formal.name.clone(), argval.clone());
           } else if let Some(ref x) = formal.def {
-            let fallback = self.defer(pos, &new_env, x)?;
+            let fallback = self.defer(pos, &new_env, x).await?;
             fn_env.insert(formal.name.clone(), Located::nowhere(fallback));
           } else {
             throw!(
@@ -740,10 +778,10 @@ impl Eval {
 
     *fn_env_ref.write() = Value::Attrs(Arc::new(fn_env));
 
-    self.eval(&new_env, &lam.body)
+    self.eval(&new_env, &lam.body).await
   }
 
-  fn force<'v>(&self, pos: Pos, v: &'v ValueRef) -> Result<RwLockReadGuard<'v, Value>> {
+  async fn force<'v>(&self, pos: Pos, v: &'v ValueRef) -> Result<RwLockReadGuard<'v, Value>> {
     let guard = unwrap!(v.try_upgradable_read(), pos, "infinite recursion");
     if guard.needs_eval() {
       let mut guard2 =
@@ -751,8 +789,8 @@ impl Eval {
       if guard2.needs_eval() {
         let old_value = std::mem::replace(&mut *guard2, Value::Blackhole);
         let new_value = match old_value {
-          Value::Apply(lhs, rhs) => self.call_function(pos, &lhs, &rhs)?,
-          Value::Thunk(Thunk(env, expr)) => self.eval(&env, &expr)?,
+          Value::Apply(lhs, rhs) => self.call_function(pos, &lhs, &rhs).await?,
+          Value::Thunk(Thunk(env, expr)) => self.eval(&env, &expr).await?,
           Value::Blackhole => throw!(pos, "infinite recursion"),
           _ => unreachable!("needs_eval() returned true, but this value does not need forcing"),
         };
@@ -764,47 +802,53 @@ impl Eval {
     }
   }
 
-  fn force_int(&self, pos: Pos, v: &ValueRef) -> Result<i64> {
-    match &*self.force(pos, v)? {
+  async fn force_int(&self, pos: Pos, v: &ValueRef) -> Result<i64> {
+    match &*self.force(pos, v).await? {
       Value::Int(i) => Ok(*i),
       v => throw!(pos, "expected int, got {}", v.typename()),
     }
   }
 
-  fn force_bool(&self, pos: Pos, v: &ValueRef) -> Result<bool> {
-    match &*self.force(pos, v)? {
+  async fn force_bool(&self, pos: Pos, v: &ValueRef) -> Result<bool> {
+    match &*self.force(pos, v).await? {
       Value::Bool(b) => Ok(*b),
       v => throw!(pos, "expected bool, got {}", v.typename()),
     }
   }
 
-  fn expect_fn(&self, pos: Pos, v: &ValueRef) -> Result<()> {
-    match &*self.force(pos, v)? {
+  async fn expect_fn(&self, pos: Pos, v: &ValueRef) -> Result<()> {
+    match &*self.force(pos, v).await? {
       Value::Lambda { .. } | Value::Primop { .. } => Ok(()),
       v => throw!(pos, "expected function, got {}", v.typename()),
     }
   }
 
-  fn force_attrs<'v>(&self, pos: Pos, v: &'v ValueRef) -> Result<MappedRwLockReadGuard<'v, Attrs>> {
-    RwLockReadGuard::try_map(self.force(pos, v)?, |m| m.as_attrs().map(|a| &**a))
+  async fn force_attrs<'v>(
+    &self,
+    pos: Pos,
+    v: &'v ValueRef,
+  ) -> Result<MappedRwLockReadGuard<'v, Attrs>> {
+    RwLockReadGuard::try_map(self.force(pos, v).await?, |m| m.as_attrs().map(|a| &**a))
       .map_err(|v| err!(pos, "expected attrset, got {}", v.typename()))
   }
 
-  pub fn force_list<'v>(
+  pub async fn force_list<'v>(
     &self,
     pos: Pos,
     v: &'v ValueRef,
   ) -> Result<MappedRwLockReadGuard<'v, [ValueRef]>> {
-    RwLockReadGuard::try_map(self.force(pos, v)?, |m| m.as_list().map(|a| a.as_slice()))
-      .map_err(|v| err!(pos, "expected list, got {}", v.typename()))
+    RwLockReadGuard::try_map(self.force(pos, v).await?, |m| {
+      m.as_list().map(|a| a.as_slice())
+    })
+    .map_err(|v| err!(pos, "expected list, got {}", v.typename()))
   }
 
-  pub fn force_string_no_context<'v>(
+  pub async fn force_string_no_context<'v>(
     &self,
     pos: Pos,
     v: &'v ValueRef,
   ) -> Result<MappedRwLockReadGuard<'v, str>> {
-    RwLockReadGuard::try_map(self.force(pos, v)?, |m| match m {
+    RwLockReadGuard::try_map(self.force(pos, v).await?, |m| match m {
       Value::String(Str { s, ctx }) if ctx.is_empty() => Some(s.as_str()),
       _ => None,
     })
@@ -817,16 +861,16 @@ impl Eval {
     })
   }
 
-  pub fn force_string<'v>(
+  pub async fn force_string<'v>(
     &self,
     pos: Pos,
     v: &'v ValueRef,
   ) -> Result<MappedRwLockReadGuard<'v, Str>> {
-    RwLockReadGuard::try_map(self.force(pos, v)?, |m| m.as_string())
+    RwLockReadGuard::try_map(self.force(pos, v).await?, |m| m.as_string())
       .map_err(|v| err!(pos, "expected string, got {}", v.typename()))
   }
 
-  fn copy_path_to_store<P: AsRef<Path>>(
+  async fn copy_path_to_store<P: AsRef<Path>>(
     &self,
     pos: Pos,
     path: P,
@@ -837,14 +881,17 @@ impl Eval {
       throw!(pos, "filenames may not end in .drv");
     }
 
-    let p = self.store.add_path_to_store(
-      path.file_name().and_then(|x| x.to_str()).unwrap_or(""),
-      path,
-      FileIngestionMethod::Recursive,
-      HashType::SHA256,
-      &PathFilter::All,
-      Repair::Off,
-    )?;
+    let p = self
+      .store
+      .add_path_to_store(
+        path.file_name().and_then(|x| x.to_str()).unwrap_or(""),
+        path,
+        FileIngestionMethod::Recursive,
+        HashType::SHA256,
+        &PathFilter::All,
+        Repair::Off,
+      )
+      .await?;
     let realpath = self.store.print_store_path(&p);
     ctx.insert(realpath.clone());
     Ok(realpath)
@@ -909,9 +956,9 @@ mod tests {
   use crate::util::*;
 
   impl Eval {
-    pub(crate) fn assert<I: AsRef<str>>(&self, input: I) -> Result<()> {
+    pub(crate) async fn assert<I: AsRef<str>>(&self, input: I) -> Result<()> {
       let input = input.as_ref();
-      let expr = self.eval_inline(input)?;
+      let expr = self.eval_inline(input).await?;
       match expr {
         Value::Bool(b) => assert!(b, "assertion failed: {}", input),
         v => bail!(
@@ -922,54 +969,63 @@ mod tests {
       Ok(())
     }
 
-    pub(crate) fn assert_err<I: AsRef<str>>(&self, input: I) {
+    pub(crate) async fn assert_err<I: AsRef<str>>(&self, input: I) {
       let input = input.as_ref();
       assert!(
-        self.eval_inline(input).is_err(),
+        self.eval_inline(input).await.is_err(),
         "expected evaluation to fail for:\n  {}",
         input
       )
     }
   }
 
-  #[test]
-  fn test_eval() -> NixResult {
+  #[tokio::test]
+  async fn test_eval() -> NixResult {
     let e = Eval::test();
-    let expr = e.eval_inline("(import <nixpkgs> {}).stdenv.cc.outPath")?;
-    e.print(&super::vref(expr))?;
+    let expr = e
+      .eval_inline("(import <nixpkgs> {}).stdenv.cc.outPath")
+      .await?;
+    e.print(&super::vref(expr)).await?;
 
     ok()
   }
 
-  #[test]
-  fn test_recursive() -> NixResult {
+  #[tokio::test]
+  async fn test_recursive() -> NixResult {
     let e = Eval::test();
 
-    e.assert("let a = { b = 1; }; inherit (a) b; in b == 1")?;
+    e.assert("let a = { b = 1; }; inherit (a) b; in b == 1")
+      .await?;
 
     ok()
   }
 
-  #[test]
-  fn test_attrs_equality() -> NixResult {
+  #[tokio::test]
+  async fn test_attrs_equality() -> NixResult {
     let e = Eval::test();
 
-    e.assert("let x = { f = _: 1; }; in x == x")?;
-    e.assert("let x = { f = _: 1; }; in x != { inherit (x) f; }")?;
-    e.assert("let x.f = { y = _: 1; }; in x == { inherit (x) f; }")?;
+    e.assert("let x = { f = _: 1; }; in x == x").await?;
+    e.assert("let x = { f = _: 1; }; in x != { inherit (x) f; }")
+      .await?;
+    e.assert("let x.f = { y = _: 1; }; in x == { inherit (x) f; }")
+      .await?;
 
-    e.assert("let x = { f = _: 1; }; in x != x // { inherit (x) f; }")?;
-    e.assert("let x = { f = _: 1; }; in x == { inherit (x) f; } // x")?;
-    e.assert(r#"let x = { f = _: 1; }; in x == builtins.removeAttrs (x // { g = 1; }) ["g"]"#)?;
+    e.assert("let x = { f = _: 1; }; in x != x // { inherit (x) f; }")
+      .await?;
+    e.assert("let x = { f = _: 1; }; in x == { inherit (x) f; } // x")
+      .await?;
+    e.assert(r#"let x = { f = _: 1; }; in x == builtins.removeAttrs (x // { g = 1; }) ["g"]"#)
+      .await?;
 
     ok()
   }
 
-  #[test]
-  fn test_map_attrs() -> NixResult {
+  #[tokio::test]
+  async fn test_map_attrs() -> NixResult {
     let e = Eval::test();
 
-    e.assert("builtins.mapAttrs (x: y: y + 10) { x = 1; y = 2; } == { x = 11; y = 12; }")?;
+    e.assert("builtins.mapAttrs (x: y: y + 10) { x = 1; y = 2; } == { x = 11; y = 12; }")
+      .await?;
 
     ok()
   }

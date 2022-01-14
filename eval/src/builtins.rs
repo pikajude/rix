@@ -70,9 +70,17 @@ impl Ord for CompareValues<'_> {
 macro_rules! checktype {
   ($($t:tt)+) => {
     |eval, pos, args| {
-      Ok(Value::Bool(matches!(&*eval.force(pos, &args[0])?, $($t)+)))
+      Box::pin(async move {
+        Ok(Value::Bool(matches!(&*eval.force(pos, &args[0]).await?, $($t)+)))
+      })
     }
   }
+}
+
+macro_rules! o {
+  ($x:path) => {
+    |eval, pos, args| Box::pin($x(eval, pos, args))
+  };
 }
 
 pub struct Init {
@@ -114,9 +122,9 @@ impl Init {
     self.add_constant("false", Value::Bool(false));
     self.add_constant("null", Value::Null);
 
-    self.add_primop("__mul", 2, prim_mul);
-    self.add_primop("__sub", 2, prim_subtract);
-    self.add_primop("__lessThan", 2, prim_less_than);
+    self.add_primop("__mul", 2, o!(prim_mul));
+    self.add_primop("__sub", 2, o!(prim_subtract));
+    self.add_primop("__lessThan", 2, o!(prim_less_than));
 
     self.add_constant("__currentSystem", Value::string("x86_64-linux"));
     self.add_constant("__nixPath", mk_nix_path());
@@ -133,7 +141,7 @@ impl Init {
       Value::Apply(
         vref(Value::Primop(
           Primop {
-            fun: prim_import,
+            fun: o!(prim_import),
             name: "import",
             arity: 1,
           },
@@ -148,70 +156,83 @@ impl Init {
     self.add_primop(
       "derivationStrict",
       1,
-      super::derivation::prim_derivation_strict,
+      o!(super::derivation::prim_derivation_strict),
     );
 
-    self.add_primop("__addErrorContext", 2, prim_add_error_context);
-    self.add_primop("__compareVersions", 2, prim_compare_versions);
-    self.add_primop("baseNameOf", 1, prim_base_name_of);
-    self.add_primop("__findFile", 2, prim_find_file);
-    self.add_primop("__fromJSON", 1, prim_from_json);
-    self.add_primop("__functionArgs", 1, prim_function_args);
-    self.add_primop("__genericClosure", 1, prim_generic_closure);
-    self.add_primop("__getEnv", 1, prim_getenv);
-    self.add_primop("import", 1, prim_import);
-    self.add_primop("__parseDrvName", 1, prim_parse_drv_name);
-    self.add_primop("__pathExists", 1, prim_path_exists);
-    self.add_primop("placeholder", 1, prim_placeholder);
-    self.add_primop("__readFile", 1, prim_read_file);
-    self.add_primop("scopedImport", 2, prim_scoped_import);
-    self.add_primop("__seq", 2, prim_seq);
-    self.add_primop("__toJSON", 1, prim_to_json);
-    self.add_primop("__tryEval", 1, prim_try_eval);
+    self.add_primop("__addErrorContext", 2, o!(prim_add_error_context));
+    self.add_primop("__compareVersions", 2, o!(prim_compare_versions));
+    self.add_primop("baseNameOf", 1, o!(prim_base_name_of));
+    self.add_primop("__findFile", 2, o!(prim_find_file));
+    self.add_primop("__fromJSON", 1, o!(prim_from_json));
+    self.add_primop("__functionArgs", 1, o!(prim_function_args));
+    self.add_primop("__genericClosure", 1, o!(prim_generic_closure));
+    self.add_primop("__getEnv", 1, o!(prim_getenv));
+    self.add_primop("import", 1, o!(prim_import));
+    self.add_primop("__parseDrvName", 1, o!(prim_parse_drv_name));
+    self.add_primop("__pathExists", 1, o!(prim_path_exists));
+    self.add_primop("placeholder", 1, o!(prim_placeholder));
+    self.add_primop("__readFile", 1, o!(prim_read_file));
+    self.add_primop("scopedImport", 2, o!(prim_scoped_import));
+    self.add_primop("__seq", 2, o!(prim_seq));
+    self.add_primop("__toJSON", 1, o!(prim_to_json));
+    self.add_primop("__tryEval", 1, o!(prim_try_eval));
 
     self.add_primop("fetchTarball", 1, |eval, pos, args| {
-      fetch::fetch(eval, pos, args, "fetchTarball", true, "source".into())
+      Box::pin(
+        async move { fetch::fetch(eval, pos, args, "fetchTarball", true, "source".into()).await },
+      )
     });
 
-    self.add_primop("__attrNames", 1, prim_attrnames);
-    self.add_primop("__getAttr", 2, prim_get_attr);
-    self.add_primop("__hasAttr", 2, prim_has_attr);
-    self.add_primop("__intersectAttrs", 2, prim_intersect_attrs);
-    self.add_primop("__listToAttrs", 1, prim_list_to_attrs);
-    self.add_primop("__mapAttrs", 2, prim_map_attrs);
-    self.add_primop("removeAttrs", 2, prim_remove_attrs);
-    self.add_primop("__unsafeGetAttrPos", 2, prim_get_attr_pos);
+    self.add_primop("__attrNames", 1, o!(prim_attrnames));
+    self.add_primop("__getAttr", 2, o!(prim_get_attr));
+    self.add_primop("__hasAttr", 2, o!(prim_has_attr));
+    self.add_primop("__intersectAttrs", 2, o!(prim_intersect_attrs));
+    self.add_primop("__listToAttrs", 1, o!(prim_list_to_attrs));
+    self.add_primop("__mapAttrs", 2, o!(prim_map_attrs));
+    self.add_primop("removeAttrs", 2, o!(prim_remove_attrs));
+    self.add_primop("__unsafeGetAttrPos", 2, o!(prim_get_attr_pos));
 
-    self.add_primop("__concatLists", 1, prim_concat_lists);
-    self.add_primop("__elem", 2, prim_elem);
-    self.add_primop("__elemAt", 2, prim_elem_at);
-    self.add_primop("__filter", 2, prim_filter);
-    self.add_primop("__foldl'", 3, prim_foldl_strict);
-    self.add_primop("__genList", 2, prim_gen_list);
-    self.add_primop("__head", 1, prim_head);
+    self.add_primop("__concatLists", 1, o!(prim_concat_lists));
+    self.add_primop("__elem", 2, o!(prim_elem));
+    self.add_primop("__elemAt", 2, o!(prim_elem_at));
+    self.add_primop("__filter", 2, o!(prim_filter));
+    self.add_primop("__foldl'", 3, o!(prim_foldl_strict));
+    self.add_primop("__genList", 2, o!(prim_gen_list));
+    self.add_primop("__head", 1, o!(prim_head));
     self.add_primop("__length", 1, |eval, pos, args| {
-      Ok(Value::Int(eval.force_list(pos, &args[0])?.len() as i64))
+      Box::pin(async move {
+        Ok(Value::Int(
+          eval.force_list(pos, &args[0]).await?.len() as i64
+        ))
+      })
     });
-    self.add_primop("map", 2, prim_map);
-    self.add_primop("__tail", 1, prim_tail);
+    self.add_primop("map", 2, o!(prim_map));
+    self.add_primop("__tail", 1, o!(prim_tail));
 
-    self.add_primop("__concatStringsSep", 2, prim_concat_strings_sep);
-    self.add_primop("__match", 2, prim_match);
-    self.add_primop("__replaceStrings", 3, prim_replace_strings);
-    self.add_primop("__split", 2, prim_split);
+    self.add_primop("__concatStringsSep", 2, o!(prim_concat_strings_sep));
+    self.add_primop("__match", 2, o!(prim_match));
+    self.add_primop("__replaceStrings", 3, o!(prim_replace_strings));
+    self.add_primop("__split", 2, o!(prim_split));
     self.add_primop("__stringLength", 1, |eval, pos, args| {
-      Ok(Value::Int(
-        eval
-          .coerce_new_string(pos, &args[0], CoerceOpts::default())?
-          .s
-          .len() as i64,
-      ))
+      Box::pin(async move {
+        Ok(Value::Int(
+          eval
+            .coerce_new_string(pos, &args[0], CoerceOpts::default())
+            .await?
+            .s
+            .len() as i64,
+        ))
+      })
     });
-    self.add_primop("__substring", 3, prim_substring);
-    self.add_primop("toString", 1, prim_to_string);
+    self.add_primop("__substring", 3, o!(prim_substring));
+    self.add_primop("toString", 1, o!(prim_to_string));
     self.add_primop("__unsafeDiscardStringContext", 1, |eval, pos, args| {
-      let s = eval.coerce_new_string(pos, &args[0], CoerceOpts::default())?;
-      Ok(Value::string(s.s))
+      Box::pin(async move {
+        let s = eval
+          .coerce_new_string(pos, &args[0], CoerceOpts::default())
+          .await?;
+        Ok(Value::string(s.s))
+      })
     });
 
     self.add_primop("__isAttrs", 1, checktype!(Value::Attrs { .. }));
@@ -241,11 +262,11 @@ impl Init {
   }
 }
 
-fn prim_compare_versions(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+async fn prim_compare_versions(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::Int(
     match do_compare(
-      &*eval.force_string_no_context(pos, &args[0])?,
-      &*eval.force_string_no_context(pos, &args[1])?,
+      &*eval.force_string_no_context(pos, &args[0]).await?,
+      &*eval.force_string_no_context(pos, &args[1]).await?,
     ) {
       Ordering::Less => -1,
       Ordering::Equal => 0,
@@ -291,53 +312,53 @@ fn components_lt(s1: &str, s2: &str) -> bool {
   }
 }
 
-fn prim_scoped_import(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+async fn prim_scoped_import(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let mut context = PathSet::new();
-  let path = eval.coerce_to_path(pos, &args[1], &mut context)?;
+  let path = eval.coerce_to_path(pos, &args[1], &mut context).await?;
 
   eval.store.realise_context(&context)?;
 
-  let vscope = eval.force_attrs(pos, &args[0])?;
+  let vscope = eval.force_attrs(pos, &args[0]).await?;
 
   if vscope.is_empty() {
-    eval.eval_file(&path)
+    eval.eval_file(&path).await
   } else {
     todo!("scopedImport is not implemented")
   }
 }
 
-fn prim_import(eval: &Eval, pos: Pos, mut args: PrimopArgs) -> Result<Value> {
+async fn prim_import(eval: &Eval, pos: Pos, mut args: PrimopArgs) -> Result<Value> {
   args.insert(0, vref(Value::Attrs(Default::default())));
-  prim_scoped_import(eval, pos, args)
+  prim_scoped_import(eval, pos, args).await
 }
 
-fn prim_remove_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let to_remove = eval.force_list(pos, &args[1])?;
+async fn prim_remove_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let to_remove = eval.force_list(pos, &args[1]).await?;
   if to_remove.is_empty() {
-    return eval.clone_value(pos, &args[0]);
+    return eval.clone_value(pos, &args[0]).await;
   }
 
-  let mut attrs = eval.force_attrs(pos, &args[0])?.clone();
+  let mut attrs = eval.force_attrs(pos, &args[0]).await?.clone();
 
   for val in to_remove.iter() {
-    let attrname = eval.force_string_no_context(pos, val)?;
+    let attrname = eval.force_string_no_context(pos, val).await?;
     attrs.remove(&Ident::from(&*attrname));
   }
 
   Ok(Value::Attrs(Arc::new(attrs)))
 }
 
-fn prim_get_attr_pos(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let attrname = eval.force_string_no_context(pos, &args[0])?;
-  let attrs = eval.force_attrs(pos, &args[1])?;
+async fn prim_get_attr_pos(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrname = eval.force_string_no_context(pos, &args[0]).await?;
+  let attrs = eval.force_attrs(pos, &args[1]).await?;
   match attrs.get(&Ident::from(&*attrname)) {
     Some(l) => pos_to_value(l.pos),
     None => Ok(Value::Null),
   }
 }
 
-fn prim_gen_list(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let n = eval.force_int(pos, &args[1])?;
+async fn prim_gen_list(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let n = eval.force_int(pos, &args[1]).await?;
   if n < 0 {
     throw!(pos, "cannot create a list of size {}", n);
   }
@@ -350,50 +371,50 @@ fn prim_gen_list(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::List(Arc::new(new_list)))
 }
 
-fn prim_head(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let list = eval.force_list(pos, &args[0])?;
+async fn prim_head(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let list = eval.force_list(pos, &args[0]).await?;
   if list.is_empty() {
     throw!(pos, "builtins.head: empty list");
   }
-  eval.clone_value(pos, &list[0])
+  eval.clone_value(pos, &list[0]).await
 }
 
-fn prim_tail(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let list = eval.force_list(pos, &args[0])?;
+async fn prim_tail(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let list = eval.force_list(pos, &args[0]).await?;
   if list.is_empty() {
     throw!(pos, "builtins.tail: empty list");
   }
   Ok(Value::List(Arc::new(list[1..].to_vec())))
 }
 
-fn prim_get_attr(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let attrname = eval.force_string_no_context(pos, &args[0])?;
-  let attrs0 = eval.force_attrs(pos, &args[1])?;
+async fn prim_get_attr(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrname = eval.force_string_no_context(pos, &args[0]).await?;
+  let attrs0 = eval.force_attrs(pos, &args[1]).await?;
   match attrs0.get(&Ident::from(&*attrname)) {
-    Some(v) => eval.clone_value(pos, &v.v),
+    Some(v) => eval.clone_value(pos, &v.v).await,
     None => throw!(pos, "attribute `{}' missing", attrname),
   }
 }
 
-fn prim_has_attr(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let attrname = eval.force_string_no_context(pos, &args[0])?;
-  let attrs0 = eval.force_attrs(pos, &args[1])?;
+async fn prim_has_attr(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrname = eval.force_string_no_context(pos, &args[0]).await?;
+  let attrs0 = eval.force_attrs(pos, &args[1]).await?;
   Ok(Value::Bool(attrs0.contains_key(&Ident::from(&*attrname))))
 }
 
-fn prim_list_to_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let list = eval.force_list(pos, &args[0])?;
+async fn prim_list_to_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let list = eval.force_list(pos, &args[0]).await?;
 
   let mut new_attrs = Attrs::new();
 
   for item in list.iter() {
-    let item = eval.force_attrs(pos, item)?;
+    let item = eval.force_attrs(pos, item).await?;
     let name = unwrap!(
       item.get(&ident!("name")),
       pos,
       "attribute `name' missing in a call to `listToAttrs'"
     );
-    let name = Ident::from(&*eval.force_string_no_context(pos, &name.v)?);
+    let name = Ident::from(&*eval.force_string_no_context(pos, &name.v).await?);
     new_attrs.insert(
       name,
       unwrap!(
@@ -408,8 +429,8 @@ fn prim_list_to_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> 
   Ok(Value::Attrs(Arc::new(new_attrs)))
 }
 
-fn prim_map(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let items = eval.force_list(pos, &args[1])?;
+async fn prim_map(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let items = eval.force_list(pos, &args[1]).await?;
   let mut new_items = Vec::with_capacity(items.len());
   for it in items.iter() {
     new_items.push(vref(Value::Apply(args[0].clone(), it.clone())));
@@ -417,8 +438,8 @@ fn prim_map(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::List(Arc::new(new_items)))
 }
 
-fn prim_map_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let attrs = eval.force_attrs(pos, &args[1])?;
+async fn prim_map_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrs = eval.force_attrs(pos, &args[1]).await?;
   let mut new_attrs = Attrs::new();
   for (k, v) in attrs.iter() {
     let name_arg = Value::string(k.to_string());
@@ -434,8 +455,8 @@ fn prim_map_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::Attrs(Arc::new(new_attrs)))
 }
 
-fn prim_attrnames(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let attrs = eval.force_attrs(pos, &args[0])?;
+async fn prim_attrnames(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrs = eval.force_attrs(pos, &args[0]).await?;
   let mut keys = Vec::with_capacity(attrs.len());
 
   for key in attrs.keys() {
@@ -445,9 +466,9 @@ fn prim_attrnames(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::List(Arc::new(keys)))
 }
 
-fn prim_intersect_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let lhs = eval.force_attrs(pos, &args[0])?;
-  let rhs = eval.force_attrs(pos, &args[1])?;
+async fn prim_intersect_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let lhs = eval.force_attrs(pos, &args[0]).await?;
+  let rhs = eval.force_attrs(pos, &args[1]).await?;
 
   let mut new_attrs = Attrs::new();
 
@@ -460,28 +481,30 @@ fn prim_intersect_attrs(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
   Ok(Value::Attrs(Arc::new(new_attrs)))
 }
 
-fn prim_getenv(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let varname = eval.force_string_no_context(pos, &args[0])?;
+async fn prim_getenv(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let varname = eval.force_string_no_context(pos, &args[0]).await?;
   Ok(Value::string(std::env::var(&*varname).unwrap_or_default()))
 }
 
-fn prim_base_name_of(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let mut path = eval.coerce_new_string(
-    pos,
-    &args[0],
-    CoerceOpts {
-      copy_to_store: false,
-      coerce_more: false,
-    },
-  )?;
+async fn prim_base_name_of(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let mut path = eval
+    .coerce_new_string(
+      pos,
+      &args[0],
+      CoerceOpts {
+        copy_to_store: false,
+        coerce_more: false,
+      },
+    )
+    .await?;
   path.s = Path::new(&path.s)
     .file_name()
     .map_or_else(String::new, |x| x.to_string_lossy().to_string());
   Ok(Value::String(path))
 }
 
-fn prim_parse_drv_name(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let n = DrvName::new(&*eval.force_string_no_context(pos, &args[0])?);
+async fn prim_parse_drv_name(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let n = DrvName::new(&*eval.force_string_no_context(pos, &args[0]).await?);
   let mut attrs = Attrs::new();
   attrs.insert(
     ident!("name"),
@@ -500,23 +523,23 @@ fn prim_parse_drv_name(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value>
   Ok(Value::Attrs(Arc::new(attrs)))
 }
 
-fn prim_path_exists(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+async fn prim_path_exists(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let mut ctx = PathSet::new();
-  let path = eval.coerce_to_path(pos, &args[0], &mut ctx)?;
+  let path = eval.coerce_to_path(pos, &args[0], &mut ctx).await?;
   eval.store.realise_context(&ctx)?;
 
   Ok(Value::Bool(path.exists()))
 }
 
-fn prim_placeholder(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let out = eval.force_string_no_context(pos, &args[0])?;
+async fn prim_placeholder(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let out = eval.force_string_no_context(pos, &args[0]).await?;
   let place = Hash::placeholder(&*out);
   Ok(Value::string(place))
 }
 
-fn prim_read_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+async fn prim_read_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let mut ctx = PathSet::new();
-  let path = eval.coerce_to_path(pos, &args[0], &mut ctx)?;
+  let path = eval.coerce_to_path(pos, &args[0], &mut ctx).await?;
   eval.store.realise_context(&ctx)?;
 
   let contents =
@@ -528,23 +551,26 @@ fn prim_read_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::string(contents))
 }
 
-#[test]
-fn test_read_file() -> Result<()> {
+#[cfg(test)]
+#[tokio::test]
+async fn test_read_file() -> NixResult<()> {
   use std::io::Write;
   let mut t = tempfile::NamedTempFile::new()?;
   t.write_all(&[0xCF])?;
 
-  Eval::test().assert_err(format!("builtins.readFile {}", t.path().display()));
-  Ok(())
+  Eval::test()
+    .assert_err(format!("builtins.readFile {}", t.path().display()))
+    .await;
+  ok()
 }
 
-fn prim_seq(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let _e = eval.force(pos, &args[0])?;
-  eval.clone_value(pos, &args[1])
+async fn prim_seq(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let _e = eval.force(pos, &args[0]).await?;
+  eval.clone_value(pos, &args[1]).await
 }
 
-fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let attrs = eval.force_attrs(pos, &args[0])?;
+async fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let attrs = eval.force_attrs(pos, &args[0]).await?;
 
   let s = unwrap!(
     attrs.get(&ident!("startSet")),
@@ -558,7 +584,7 @@ fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
     "attribute `operator' required"
   );
 
-  let start_set = eval.force_list(pos, &s.v)?;
+  let start_set = eval.force_list(pos, &s.v).await?;
 
   let mut work_set = vec![];
 
@@ -570,14 +596,14 @@ fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
   let mut done_keys = BTreeSet::new();
 
   while let Some(ws) = work_set.pop() {
-    let e = eval.force_attrs(pos, &ws)?.clone();
+    let e = eval.force_attrs(pos, &ws).await?.clone();
     if let Some(key) = e.get(&ident!("key")) {
-      let key = eval.clone_value(key.pos, &key.v)?;
+      let key = eval.clone_value(key.pos, &key.v).await?;
       if !done_keys.insert(CompareValues(Cow::Owned(key))) {
         continue;
       }
       res.push(ws.clone());
-      let v = eval.call_function(pos, &op.v, &ws)?;
+      let v = eval.call_function(pos, &op.v, &ws).await?;
       let new_values = unwrap!(
         v.as_list(),
         pos,
@@ -594,8 +620,8 @@ fn prim_generic_closure(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
   Ok(Value::List(Arc::new(res)))
 }
 
-fn prim_function_args(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let arg0 = eval.force(pos, &args[0])?;
+async fn prim_function_args(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let arg0 = eval.force(pos, &args[0]).await?;
   let lam = unwrap!(arg0.as_lambda(), pos, "`functionArgs' requires a function").1;
 
   match &lam.arg {
@@ -616,19 +642,21 @@ fn prim_function_args(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> 
   }
 }
 
-fn prim_add_error_context(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  match eval.clone_value(pos, &args[1]) {
+async fn prim_add_error_context(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  match eval.clone_value(pos, &args[1]).await {
     Ok(v) => Ok(v),
     Err(e) => {
-      let new_context = eval.coerce_new_string(pos, &args[0], CoerceOpts::default())?;
+      let new_context = eval
+        .coerce_new_string(pos, &args[0], CoerceOpts::default())
+        .await?;
       Err(e.context(new_context.s))
     }
   }
 }
 
-fn prim_subtract(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let v1 = eval.force(pos, &args[0])?;
-  let v2 = eval.force(pos, &args[1])?;
+async fn prim_subtract(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let v1 = eval.force(pos, &args[0]).await?;
+  let v2 = eval.force(pos, &args[1]).await?;
   numeric_op(
     &*v1,
     &*v2,
@@ -645,9 +673,9 @@ fn prim_subtract(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   })
 }
 
-fn prim_mul(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let v1 = eval.force(pos, &args[0])?;
-  let v2 = eval.force(pos, &args[1])?;
+async fn prim_mul(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let v1 = eval.force(pos, &args[0]).await?;
+  let v2 = eval.force(pos, &args[1]).await?;
   numeric_op(
     &*v1,
     &*v2,
@@ -664,20 +692,24 @@ fn prim_mul(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   })
 }
 
-fn prim_to_string(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  Ok(Value::String(eval.coerce_new_string(
-    pos,
-    &args[0],
-    CoerceOpts {
-      coerce_more: true,
-      copy_to_store: false,
-    },
-  )?))
+async fn prim_to_string(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  Ok(Value::String(
+    eval
+      .coerce_new_string(
+        pos,
+        &args[0],
+        CoerceOpts {
+          coerce_more: true,
+          copy_to_store: false,
+        },
+      )
+      .await?,
+  ))
 }
 
-fn prim_less_than(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let v1 = eval.force(pos, &args[0])?;
-  let v2 = eval.force(pos, &args[1])?;
+async fn prim_less_than(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let v1 = eval.force(pos, &args[0]).await?;
+  let v2 = eval.force(pos, &args[1]).await?;
 
   let v1 = CompareValues(Cow::Borrowed(&*v1));
   let v2 = CompareValues(Cow::Borrowed(&*v2));
@@ -694,25 +726,29 @@ fn prim_less_than(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   }
 }
 
-fn prim_concat_strings_sep(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let Str { s: sep, mut ctx } = eval.force_string(pos, &args[0])?.clone();
+async fn prim_concat_strings_sep(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let Str { s: sep, mut ctx } = eval.force_string(pos, &args[0]).await?.clone();
 
-  let strs = eval.force_list(pos, &args[1])?;
+  let strs = eval.force_list(pos, &args[1]).await?;
   let mut new = String::new();
 
   for (i, item) in strs.iter().enumerate() {
     if i > 0 {
       new.push_str(&sep);
     }
-    new.push_str(&eval.coerce_to_string(pos, item, &mut ctx, CoerceOpts::default())?);
+    new.push_str(
+      &eval
+        .coerce_to_string(pos, item, &mut ctx, CoerceOpts::default())
+        .await?,
+    );
   }
 
   Ok(Value::String(Str { s: new, ctx }))
 }
 
-fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let from = eval.force_list(pos, &args[0])?;
-  let to = eval.force_list(pos, &args[1])?;
+async fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let from = eval.force_list(pos, &args[0]).await?;
+  let to = eval.force_list(pos, &args[1]).await?;
   if from.len() != to.len() {
     throw!(
       pos,
@@ -722,18 +758,18 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
 
   let mut from_list = vec![];
   for f in from.iter() {
-    from_list.push(eval.force_string(pos, f)?);
+    from_list.push(eval.force_string(pos, f).await?);
   }
 
   let mut to_list = vec![];
   for t in to.iter() {
-    to_list.push(eval.force_string(pos, t)?);
+    to_list.push(eval.force_string(pos, t).await?);
   }
 
   let Str {
     s: haystack,
     mut ctx,
-  } = eval.force_string(pos, &args[2])?.clone();
+  } = eval.force_string(pos, &args[2]).await?.clone();
 
   let mut output = String::new();
 
@@ -774,21 +810,26 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
   Ok(Value::String(Str { s: output, ctx }))
 }
 
-#[test]
-fn test_replace_strings() -> NixResult {
+#[cfg(test)]
+#[tokio::test]
+async fn test_replace_strings() -> NixResult {
   let eval = Eval::test();
 
-  eval.assert(
-    r#"
+  eval
+    .assert(
+      r#"
     builtins.replaceStrings ["-" "."] ["_" "_"] "x86_64-unknown-linux-gnu"
       == "x86_64_unknown_linux_gnu"
   "#,
-  )?;
-  eval.assert(
-    r#"
+    )
+    .await?;
+  eval
+    .assert(
+      r#"
     builtins.replaceStrings ["q"] ["e"] "jéff" == "jéff"
   "#,
-  )?;
+    )
+    .await?;
 
   ok()
 }
@@ -811,12 +852,12 @@ impl REGEX_CACHE {
   }
 }
 
-fn prim_match(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+async fn prim_match(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let mut regex_str = String::from("^");
-  regex_str.push_str(&*eval.force_string_no_context(pos, &args[0])?);
+  regex_str.push_str(&*eval.force_string_no_context(pos, &args[0]).await?);
   regex_str.push('$');
   let reg = REGEX_CACHE.get(&regex_str)?;
-  let haystack = eval.force_string(pos, &args[1])?;
+  let haystack = eval.force_string(pos, &args[1]).await?;
 
   if let Some(caps) = reg.captures(&haystack.s) {
     let strs = caps
@@ -830,28 +871,33 @@ fn prim_match(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   }
 }
 
-#[test]
-fn test_match() -> NixResult {
+#[cfg(test)]
+#[tokio::test]
+async fn test_match() -> NixResult {
   let eval = Eval::test();
 
-  eval.assert(r#"builtins.match "ab" "abc" == null"#)?;
-  eval.assert(r#"builtins.match "abc" "abc" == []"#)?;
-  eval.assert(r#"builtins.match "a(b)(c)" "abc" == [ "b" "c" ]"#)?;
-  eval.assert(
-    r#"
+  eval.assert(r#"builtins.match "ab" "abc" == null"#).await?;
+  eval.assert(r#"builtins.match "abc" "abc" == []"#).await?;
+  eval
+    .assert(r#"builtins.match "a(b)(c)" "abc" == [ "b" "c" ]"#)
+    .await?;
+  eval
+    .assert(
+      r#"
     builtins.match "[[:space:]]+([[:upper:]]+)[[:space:]]+" "  FOO   "
       == [ "FOO" ]
       "#,
-  )?;
+    )
+    .await?;
 
   ok()
 }
 
-fn prim_split(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let regex = eval.force_string_no_context(pos, &args[0])?;
+async fn prim_split(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let regex = eval.force_string_no_context(pos, &args[0]).await?;
   let regex = REGEX_CACHE.get(&*regex)?;
 
-  let haystack = eval.force_string(pos, &args[1])?;
+  let haystack = eval.force_string(pos, &args[1]).await?;
 
   let mut caps_iter = regex.captures_iter(&haystack.s).peekable();
 
@@ -886,22 +932,33 @@ fn prim_split(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::List(Arc::new(parts)))
 }
 
-#[test]
-fn test_split() -> NixResult {
+#[cfg(test)]
+#[tokio::test]
+async fn test_split() -> NixResult {
   let eval = Eval::test();
 
-  eval.assert(r#"builtins.split "(a)b" "abc" == [ "" [ "a" ] "c" ]"#)?;
-  eval.assert(r#"builtins.split "([ac])" "abc" == [ "" [ "a" ] "b" [ "c" ] "" ]"#)?;
-  eval.assert(r#"builtins.split "(a)|(c)" "abc" == [ "" [ "a" null ] "b" [ null "c" ] "" ]"#)?;
-  eval.assert(r#"builtins.split "([[:upper:]]+)" "  FOO  " == [ "  " [ "FOO" ] "  " ]"#)?;
+  eval
+    .assert(r#"builtins.split "(a)b" "abc" == [ "" [ "a" ] "c" ]"#)
+    .await?;
+  eval
+    .assert(r#"builtins.split "([ac])" "abc" == [ "" [ "a" ] "b" [ "c" ] "" ]"#)
+    .await?;
+  eval
+    .assert(r#"builtins.split "(a)|(c)" "abc" == [ "" [ "a" null ] "b" [ null "c" ] "" ]"#)
+    .await?;
+  eval
+    .assert(r#"builtins.split "([[:upper:]]+)" "  FOO  " == [ "  " [ "FOO" ] "  " ]"#)
+    .await?;
 
   ok()
 }
 
-fn prim_substring(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let start = eval.force_int(pos, &args[0])?;
-  let len = eval.force_int(pos, &args[1])?;
-  let mut new_str = eval.coerce_new_string(pos, &args[2], CoerceOpts::default())?;
+async fn prim_substring(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let start = eval.force_int(pos, &args[0]).await?;
+  let len = eval.force_int(pos, &args[1]).await?;
+  let mut new_str = eval
+    .coerce_new_string(pos, &args[2], CoerceOpts::default())
+    .await?;
 
   let start: usize = start
     .try_into()
@@ -917,13 +974,13 @@ fn prim_substring(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::String(new_str))
 }
 
-fn prim_concat_lists(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let items = eval.force_list(pos, &args[0])?;
+async fn prim_concat_lists(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let items = eval.force_list(pos, &args[0]).await?;
 
   let mut new_list = vec![];
 
   for list in items.iter() {
-    for item in eval.force_list(pos, list)?.iter() {
+    for item in eval.force_list(pos, list).await?.iter() {
       new_list.push(item.clone());
     }
   }
@@ -931,32 +988,32 @@ fn prim_concat_lists(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::List(Arc::new(new_list)))
 }
 
-fn prim_elem(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let haystack = eval.force_list(pos, &args[1])?;
+async fn prim_elem(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let haystack = eval.force_list(pos, &args[1]).await?;
   for item in haystack.iter() {
-    if eval.eq_values(pos, &args[0], item)? {
+    if eval.eq_values(pos, &args[0], item).await? {
       return Ok(Value::Bool(true));
     }
   }
   Ok(Value::Bool(false))
 }
 
-fn prim_elem_at(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let n = eval.force_int(pos, &args[1])? as usize;
-  match eval.force_list(pos, &args[0])?.get(n) {
-    Some(l) => eval.clone_value(pos, l),
+async fn prim_elem_at(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let n = eval.force_int(pos, &args[1]).await? as usize;
+  match eval.force_list(pos, &args[0]).await?.get(n) {
+    Some(l) => eval.clone_value(pos, l).await,
     None => throw!(pos, "list index `{}' out of bounds", n),
   }
 }
 
-fn prim_filter(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  eval.expect_fn(pos, &args[0])?;
-  let haystack = eval.force_list(pos, &args[1])?;
+async fn prim_filter(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  eval.expect_fn(pos, &args[0]).await?;
+  let haystack = eval.force_list(pos, &args[1]).await?;
 
   let mut new_list = Vec::with_capacity(haystack.len());
 
   for item in haystack.iter() {
-    let val = eval.call_function(pos, &args[0], item)?;
+    let val = eval.call_function(pos, &args[0], item).await?;
     if let Value::Bool(b) = val {
       if b {
         new_list.push(item.clone());
@@ -973,36 +1030,38 @@ fn prim_filter(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   Ok(Value::List(Arc::new(new_list)))
 }
 
-fn prim_foldl_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  eval.expect_fn(pos, &args[0])?;
-  let items = eval.force_list(pos, &args[2])?;
+async fn prim_foldl_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  eval.expect_fn(pos, &args[0]).await?;
+  let items = eval.force_list(pos, &args[2]).await?;
 
   let mut acc = &args[1];
   let mut full_op;
   for item in items.iter() {
-    let partial_op = vref(eval.call_function(pos, &args[0], acc)?);
-    full_op = vref(eval.call_function(pos, &partial_op, item)?);
+    let partial_op = vref(eval.call_function(pos, &args[0], acc).await?);
+    full_op = vref(eval.call_function(pos, &partial_op, item).await?);
     acc = &full_op;
   }
 
-  eval.clone_value(pos, acc)
+  eval.clone_value(pos, acc).await
 }
 
-#[test]
-fn test_foldl_strict() -> NixResult {
+#[cfg(test)]
+#[tokio::test]
+async fn test_foldl_strict() -> NixResult {
   let e = Eval::test();
   e.assert(
     r#"
     builtins.foldl' (x: y: "${x}-${y}") "a" ["b" "c" "d"]
       == "a-b-c-d"
   "#,
-  )?;
+  )
+  .await?;
 
   ok()
 }
 
-fn prim_try_eval(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  match eval.clone_value(pos, &args[0]) {
+async fn prim_try_eval(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  match eval.clone_value(pos, &args[0]).await {
     Ok(v) => {
       let mut attrs = Attrs::new();
       attrs.insert(ident!("value"), Located { pos, v: vref(v) });
@@ -1039,9 +1098,9 @@ fn prim_try_eval(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   }
 }
 
-fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let entries = eval.force_list(pos, &args[0])?;
-  let target = eval.force_string_no_context(pos, &args[1])?;
+async fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let entries = eval.force_list(pos, &args[0]).await?;
+  let target = eval.force_string_no_context(pos, &args[1]).await?;
   let mut path_parts = Path::new(&*target).components();
   let search_key = path_parts
     .next()
@@ -1057,22 +1116,24 @@ fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   };
 
   for entry in &*entries {
-    let attrs = eval.force_attrs(pos, entry)?;
+    let attrs = eval.force_attrs(pos, entry).await?;
     let path = unwrap!(attrs.get(&ident!("path")), pos, "attribute `path' missing");
-    let path = eval.coerce_new_string(
-      pos,
-      &path.v,
-      CoerceOpts {
-        copy_to_store: false,
-        coerce_more: false,
-      },
-    )?;
+    let path = eval
+      .coerce_new_string(
+        pos,
+        &path.v,
+        CoerceOpts {
+          copy_to_store: false,
+          coerce_more: false,
+        },
+      )
+      .await?;
     let prefix = unwrap!(
       attrs.get(&ident!("prefix")),
       pos,
       "attribute `prefix' missing"
     );
-    let prefix = eval.force_string_no_context(pos, &prefix.v)?;
+    let prefix = eval.force_string_no_context(pos, &prefix.v).await?;
 
     if search_key == &*prefix {
       let full = add_children(path.s.into());
@@ -1100,11 +1161,11 @@ fn prim_find_file(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   ))
 }
 
-fn prim_to_json(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+async fn prim_to_json(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   let mut v = Vec::new();
   let mut ctx = PathSet::new();
 
-  serialize(eval, &mut v, pos, &args[0], &mut ctx)?;
+  serialize(eval, &mut v, pos, &args[0], &mut ctx).await?;
 
   Ok(Value::String(Str {
     s: unsafe { String::from_utf8_unchecked(v) },
@@ -1112,19 +1173,20 @@ fn prim_to_json(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
   }))
 }
 
-fn prim_from_json(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
-  let s = eval.force_string_no_context(pos, &args[0])?;
+async fn prim_from_json(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
+  let s = eval.force_string_no_context(pos, &args[0]).await?;
   json_to_value(eval, pos, serde_json::from_str(&*s)?)
 }
 
-fn serialize(
+#[async_recursion(?Send)]
+async fn serialize(
   eval: &Eval,
   ser: &mut Vec<u8>,
   pos: Pos,
   v: &ValueRef,
   ctx: &mut PathSet,
 ) -> Result<()> {
-  match &*eval.force(pos, v)? {
+  match &*eval.force(pos, v).await? {
     Value::Null => ser.extend(b"null"),
     Value::Bool(b) => ser.extend(if *b { &b"true"[..] } else { &b"false"[..] }),
     Value::String(Str { s, ctx: ctx2 }) => {
@@ -1140,7 +1202,7 @@ fn serialize(
         } else {
           ser.push(b',');
         }
-        serialize(eval, ser, pos, item, ctx)?;
+        serialize(eval, ser, pos, item, ctx).await?;
       }
       ser.push(b']');
     }
@@ -1205,7 +1267,7 @@ fn json_to_value(eval: &Eval, pos: Pos, value: JSON) -> Result<Value> {
 fn mk_nix_path() -> Value {
   let mut entries = vec![];
   for entry in get_nix_path().into_iter().chain(std::iter::once(format!(
-    "nix={}/src/eval/corepkgs",
+    "nix={}/src/corepkgs",
     env!("CARGO_MANIFEST_DIR")
   ))) {
     let mut parts = entry.splitn(2, '=');
