@@ -7,9 +7,9 @@ use std::process::{exit, Command};
 use std::{fs, slice};
 
 use super::*;
-use crate::fetch::builtin_fetchurl;
 use crate::lock::{UserLock, UserLocker};
 use crate::settings::{settings, BuildMode, SandboxMode};
+use rix_eval::fetch::builtin_fetchurl;
 use rix_store::{StorePathSet, ValidPathInfo};
 mod sys_ext;
 

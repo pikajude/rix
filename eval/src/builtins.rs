@@ -141,7 +141,7 @@ impl Init {
         )),
         vref(Value::Path(PathBuf::from(concat!(
           env!("CARGO_MANIFEST_DIR"),
-          "/src/eval/corepkgs/derivation.nix"
+          "/src/corepkgs/derivation.nix"
         )))),
       ),
     );

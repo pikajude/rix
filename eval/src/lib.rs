@@ -1,3 +1,8 @@
+#![feature(map_first_last, option_zip)]
+
+extern crate rix_syntax as syntax;
+extern crate rix_util as util;
+
 use crate::syntax::expr::{AttrName, Bin, Lambda, LambdaArg};
 use crate::syntax::Expr;
 use crate::util::*;
@@ -11,7 +16,7 @@ use value::*;
 
 mod builtins;
 mod derivation;
-mod fetch;
+pub mod fetch;
 mod print;
 mod value;
 
@@ -53,7 +58,7 @@ impl Eval {
   pub fn test() -> Self {
     logger::init().expect("unable to init logger");
     Self::new(Arc::new(
-      crate::local_store::LocalStore::new().expect("unable to open local store"),
+      rix_core::local_store::LocalStore::new().expect("unable to open local store"),
     ))
   }
 
@@ -490,8 +495,9 @@ impl Eval {
         s.clone()
       }
       Value::Path(p) => {
-        trace!("canonicalizing {}", p.display());
-        let p = p.canonicalize()?;
+        let p = p
+          .canonicalize()
+          .with_context(|| format!("canonicalizing {}", p.display()))?;
         if opts.copy_to_store {
           self.copy_path_to_store(pos, &p, context)?
         } else {

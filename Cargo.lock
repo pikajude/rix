@@ -278,9 +278,9 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "curl"
-version = "0.4.41"
+version = "0.4.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bc6d233563261f8db6ffb83bbaad5a73837a6e6b28868e926337ebbdece0be3"
+checksum = "7de97b894edd5b5bcceef8b78d7da9b75b1d2f2f9a910569d0bde3dd31d84939"
 dependencies = [
  "curl-sys",
  "libc",
@@ -293,9 +293,9 @@ dependencies = [
 
 [[package]]
 name = "curl-sys"
-version = "0.4.51+curl-7.80.0"
+version = "0.4.52+curl-7.81.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d130987e6a6a34fe0889e1083022fa48cd90e6709a84be3fb8dd95801de5af20"
+checksum = "14b8c2d1023ea5fded5b7b892e4b8e95f70038a421126a056761a84246a28971"
 dependencies = [
  "cc",
  "libc",
@@ -427,6 +427,15 @@ name = "fallible-streaming-iterator"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
+
+[[package]]
+name = "fastrand"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "779d043b6a0b90cc4c0ed7ee380a6504394cee7efd7db050e3774eee387324b2"
+dependencies = [
+ "instant",
+]
 
 [[package]]
 name = "fixedbitset"
@@ -1042,7 +1051,7 @@ dependencies = [
  "libc",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
- "rand_hc 0.2.0",
+ "rand_hc",
  "rand_pcg",
 ]
 
@@ -1055,7 +1064,6 @@ dependencies = [
  "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.3",
- "rand_hc 0.3.1",
 ]
 
 [[package]]
@@ -1118,15 +1126,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
  "rand_core 0.5.1",
-]
-
-[[package]]
-name = "rand_hc"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
-dependencies = [
- "rand_core 0.6.3",
 ]
 
 [[package]]
@@ -1227,6 +1226,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "regex",
+ "rix-eval",
  "rix-store",
  "rix-syntax",
  "rix-util",
@@ -1242,6 +1242,32 @@ dependencies = [
  "tempfile",
  "termcolor",
  "users",
+]
+
+[[package]]
+name = "rix-eval"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossbeam",
+ "curl",
+ "dirs",
+ "libarchive3-sys",
+ "nix",
+ "once_cell",
+ "parking_lot",
+ "regex",
+ "rix-core",
+ "rix-store",
+ "rix-syntax",
+ "rix-util",
+ "serde",
+ "serde_json",
+ "slog",
+ "slog-scope",
+ "smallvec",
+ "tempfile",
+ "termcolor",
 ]
 
 [[package]]
@@ -1428,18 +1454,18 @@ checksum = "568a8e6258aa33c13358f81fd834adb854c6f7c9468520910a9b1e8fac068012"
 
 [[package]]
 name = "serde"
-version = "1.0.132"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b9875c23cf305cd1fd7eb77234cbb705f21ea6a72c637a5c6db5fe4b8e7f008"
+checksum = "97565067517b60e2d1ea8b268e59ce036de907ac523ad83a0475da04e818989a"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.132"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc0db5cb2556c0e558887d9bbdcf6ac4471e83ff66cf696e5419024d1606276"
+checksum = "ed201699328568d8d08208fdd080e3ff594e6c422e438b6705905da01005d537"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1448,9 +1474,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.73"
+version = "1.0.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcbd0344bc6533bc7ec56df11d42fb70f1b912351c0825ccb7211b59d8af7cf5"
+checksum = "ee2bb9cd061c5865d345bb02ca49fcef1391741b672b54a0bf7b679badec3142"
 dependencies = [
  "itoa",
  "ryu",
@@ -1539,9 +1565,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ecab6c735a6bb4139c0caafd0cc3635748bbb3acf4550e8138122099251f309"
+checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "socket2"
@@ -1633,13 +1659,13 @@ checksum = "0642ac8a287350e5bd14ac50e7a137d49432ae625a1ae83668323ef3ca466af8"
 
 [[package]]
 name = "tempfile"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dac1c663cfc93810f88aed9b8941d48cabf856a1b111c29a40439018d870eb22"
+checksum = "5cdb1ef4eaeeaddc8fbd371e5017057064af0911902ef36b39801f67cc6d79e4"
 dependencies = [
  "cfg-if 1.0.0",
+ "fastrand",
  "libc",
- "rand 0.8.4",
  "redox_syscall",
  "remove_dir_all",
  "winapi 0.3.9",
