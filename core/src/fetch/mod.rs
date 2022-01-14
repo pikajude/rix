@@ -180,7 +180,7 @@ pub fn download_file<S: Store + ?Sized>(
     let mut path_info = ValidPathInfo::new(store_path.clone(), nar_hash);
     path_info.nar_size = Some(nar_size);
 
-    store.add_to_store(path_info, Box::new(nar_file), crate::store::Repair::Off)?;
+    block_on(store.add_to_store(path_info, Box::new(nar_file), crate::store::Repair::Off))?;
   }
 
   cache.insert(store, &input_attrs, &inf, &store_path, immutable)?;

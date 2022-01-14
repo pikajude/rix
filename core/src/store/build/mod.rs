@@ -114,7 +114,7 @@ impl Worker {
     let messages = Arc::clone(&self.messages);
 
     scope.spawn(move |scope| {
-      let res = sys::build(&*store, scope, &path, &drv);
+      let res = block_on(sys::build(&*store, scope, &path, &drv));
       messages.push(Message::Finish(
         id,
         drv.outputs.keys().cloned().collect(),

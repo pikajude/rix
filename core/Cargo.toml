@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.52"
+async-trait = "0.1.52"
 cfg-if = "1.0.0"
 crossbeam = "0.8.1"
 curl = "0.4.41"

@@ -58,6 +58,7 @@ impl LocalStore {
   }
 }
 
+#[async_trait]
 impl Store for LocalStore {
   fn store_path(&self) -> &Path {
     &self.store
@@ -162,7 +163,7 @@ impl Store for LocalStore {
       });
 
       let store_path =
-        self.add_dump_to_store(Box::new(read_side), name, method, hash_type, repair)?;
+        block_on(self.add_dump_to_store(Box::new(read_side), name, method, hash_type, repair))?;
       hdl.join().unwrap()?;
       Ok(store_path)
     })
@@ -181,7 +182,12 @@ impl Store for LocalStore {
     Ok(())
   }
 
-  fn add_to_store(&self, path_info: ValidPathInfo, source: Box<dyn Read>, _: Repair) -> Result<()> {
+  async fn add_to_store(
+    &self,
+    path_info: ValidPathInfo,
+    source: Box<dyn Read + Send>,
+    _: Repair,
+  ) -> Result<()> {
     if !self.is_valid_path(&path_info.path)? {
       let real_path = self.to_real_path(&path_info.path);
 
@@ -220,15 +226,15 @@ impl Store for LocalStore {
         );
       }
 
-      self.register_valid_path(path_info)?;
+      self.register_valid_path(path_info).await?;
     }
 
     Ok(())
   }
 
-  fn add_dump_to_store(
+  async fn add_dump_to_store(
     &self,
-    source: Box<dyn Read>,
+    source: Box<dyn Read + Send>,
     name: &str,
     method: FileIngestionMethod,
     algo: HashType,
@@ -264,7 +270,7 @@ impl Store for LocalStore {
     let mut info = ValidPathInfo::new(dst_path.clone(), hash);
     info.nar_size = Some(size);
 
-    self.register_valid_path(info)?;
+    self.register_valid_path(info).await?;
 
     Ok(dst_path)
   }
@@ -317,7 +323,7 @@ impl Store for LocalStore {
     }
   }
 
-  fn register_valid_paths(&self, mut infos: Vec<ValidPathInfo>) -> Result<()> {
+  async fn register_valid_paths(&self, mut infos: Vec<ValidPathInfo>) -> Result<()> {
     const REGISTER_VALID: &str = "insert into ValidPaths (path, hash, registrationTime, deriver, \
                                   narSize, ultimate, sigs, ca) values (?, ?, ?, ?, ?, ?, ?, ?)";
     const UPDATE_VALID: &str =

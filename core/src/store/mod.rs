@@ -1,5 +1,6 @@
 use crate::util::*;
 use anyhow::Result;
+use async_trait::async_trait;
 pub use prelude::StorePath;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
@@ -30,6 +31,7 @@ pub struct ClosureOpts {
   pub include_derivers: bool,
 }
 
+#[async_trait]
 pub trait Store: Send + Sync {
   fn store_path(&self) -> &Path;
 
@@ -266,19 +268,19 @@ pub trait Store: Send + Sync {
     repair: Repair,
   ) -> Result<StorePath>;
 
-  fn add_dump_to_store(
+  async fn add_dump_to_store(
     &self,
-    source: Box<dyn Read>,
+    source: Box<dyn Read + Send>,
     name: &str,
     method: FileIngestionMethod,
     algo: HashType,
     repair: Repair,
   ) -> Result<StorePath>;
 
-  fn add_to_store(
+  async fn add_to_store(
     &self,
     path_info: ValidPathInfo,
-    source: Box<dyn Read>,
+    source: Box<dyn Read + Send>,
     repair: Repair,
   ) -> Result<()>;
 
@@ -297,10 +299,10 @@ pub trait Store: Send + Sync {
 
   fn check_uri(&self, uri: &str) -> Result<()>;
 
-  fn register_valid_paths(&self, infos: Vec<ValidPathInfo>) -> Result<()>;
+  async fn register_valid_paths(&self, infos: Vec<ValidPathInfo>) -> Result<()>;
 
-  fn register_valid_path(&self, info: ValidPathInfo) -> Result<()> {
-    self.register_valid_paths(vec![info])
+  async fn register_valid_path(&self, info: ValidPathInfo) -> Result<()> {
+    self.register_valid_paths(vec![info]).await
   }
 
   fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>>;
