@@ -1,6 +1,8 @@
+use rix_store::derivation::FixedOutputHash;
+use rix_store::{HashModulo, Output};
+
 use super::*;
-use crate::store::derivation::{FixedOutputHash, HashModulo, Output};
-use crate::store::{Derivation, FileIngestionMethod, Repair};
+use rix_store::{Derivation, FileIngestionMethod, Repair};
 use std::collections::BTreeSet;
 
 fn decode_context(s: &str) -> (&str, &str) {
@@ -212,7 +214,7 @@ pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result
       drv.env.insert(outname.clone(), String::new());
       drv.outputs.insert(
         outname.clone(),
-        Output::InputAddressed(crate::store::path::DUMMY.clone()),
+        Output::InputAddressed(rix_store::path::DUMMY.clone()),
       );
     }
 

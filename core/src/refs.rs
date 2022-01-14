@@ -2,11 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
 use std::path::Path;
 
+use rix_store::StorePath;
 use rix_util::hash::HashResult;
+use rix_util::*;
 
 use crate::util::base32::IS_BASE32;
-
-use super::prelude::*;
 
 struct RefScanner {
   hashes: HashSet<Vec<u8>>,

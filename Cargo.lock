@@ -1227,6 +1227,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "regex",
+ "rix-store",
  "rix-syntax",
  "rix-util",
  "rlimit",
@@ -1241,6 +1242,19 @@ dependencies = [
  "tempfile",
  "termcolor",
  "users",
+]
+
+[[package]]
+name = "rix-store"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "derivative",
+ "derive_more",
+ "lazy_static",
+ "parking_lot",
+ "rix-util",
 ]
 
 [[package]]

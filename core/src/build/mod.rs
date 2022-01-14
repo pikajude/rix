@@ -1,5 +1,6 @@
-use crate::store::prelude::*;
 use crossbeam::thread::Scope;
+use rix_store::{Derivation, Store, StorePath};
+use rix_util::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;

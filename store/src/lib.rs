@@ -1,25 +1,37 @@
-use crate::util::*;
-use anyhow::Result;
+#![feature(pattern)]
+
+pub mod path;
+pub use self::path::{Hash as StorePathHash, Path as StorePath};
+pub mod derivation;
+pub mod path_info;
 use async_trait::async_trait;
-pub use prelude::StorePath;
+pub use derivation::{Derivation, DerivationType, DrvName, HashModulo, Output};
+pub use path_info::ValidPathInfo;
+use rix_util::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-pub mod build;
-pub mod derivation;
-mod local;
-mod lock;
-pub mod path;
-pub mod path_info;
-mod prelude;
-pub mod refs;
-pub mod settings;
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum FileIngestionMethod {
+  Flat,
+  Recursive,
+}
 
-pub use derivation::{Derivation, DerivationType, DrvName, HashModulo, Output};
-pub use local::LocalStore;
-pub use path_info::ValidPathInfo;
-pub use prelude::{FileIngestionMethod, Repair};
+impl FileIngestionMethod {
+  pub fn prefix(self) -> &'static str {
+    match self {
+      Self::Flat => "",
+      Self::Recursive => "r:",
+    }
+  }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Repair {
+  Off,
+  On,
+}
 
 pub type PathSet = BTreeSet<String>;
 pub type StorePathSet = BTreeSet<StorePath>;

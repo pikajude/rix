@@ -1,9 +1,9 @@
-use crate::store::{FileIngestionMethod, Repair, Store};
 use crate::syntax::expr::{AttrName, Bin, Lambda, LambdaArg};
 use crate::syntax::Expr;
 use crate::util::*;
 use error::*;
 use parking_lot::*;
+use rix_store::{FileIngestionMethod, Repair, Store};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -53,7 +53,7 @@ impl Eval {
   pub fn test() -> Self {
     logger::init().expect("unable to init logger");
     Self::new(Arc::new(
-      crate::store::LocalStore::new().expect("unable to open local store"),
+      crate::local_store::LocalStore::new().expect("unable to open local store"),
     ))
   }
 

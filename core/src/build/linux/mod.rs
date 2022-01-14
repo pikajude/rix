@@ -8,10 +8,9 @@ use std::{fs, slice};
 
 use super::*;
 use crate::fetch::builtin_fetchurl;
-use crate::store::derivation::output_path_name;
-use crate::store::lock::{UserLock, UserLocker};
-use crate::store::settings::{settings, BuildMode, SandboxMode};
-use crate::store::{StorePathSet, ValidPathInfo};
+use crate::lock::{UserLock, UserLocker};
+use crate::settings::{settings, BuildMode, SandboxMode};
+use rix_store::{StorePathSet, ValidPathInfo};
 mod sys_ext;
 
 use anyhow::Error;
@@ -32,6 +31,8 @@ use nix::sys::wait::{waitpid, WaitStatus};
 use nix::unistd::*;
 use nix::NixPath;
 use parking_lot::Once;
+use rix_store::derivation::output_path_name;
+use rix_store::HashModulo;
 use rix_util::hash::HashResult;
 use rlimit::Resource;
 
@@ -670,10 +671,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
               len: nar_size,
             },
             references,
-          ) = crate::store::refs::scan_for_references(
-            &actual_path,
-            referenceable_paths.iter().copied(),
-          )?;
+          ) = crate::refs::scan_for_references(&actual_path, referenceable_paths.iter().copied())?;
 
           for p in &self.input_paths {
             if references.contains(&p) {

@@ -13,8 +13,8 @@ use nix::unistd::{fork, setuid, ForkResult, Gid, Pid, Uid};
 use users::os::unix::GroupExt;
 use users::User;
 
-use super::prelude::*;
 use super::settings::settings;
+use rix_util::*;
 
 pub struct UserLocker {
   group_name: String,

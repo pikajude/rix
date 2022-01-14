@@ -1,7 +1,7 @@
 use super::*;
-use crate::store::DrvName;
 use crossbeam::atomic::AtomicCell;
 use regex::Regex;
+use rix_store::DrvName;
 use serde_json::{to_writer, Value as JSON};
 use std::borrow::Cow;
 use std::cmp::Ordering;

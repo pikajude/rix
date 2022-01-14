@@ -1,6 +1,6 @@
+use rix_core::build::Worker;
 use rix_core::eval::Eval;
-use rix_core::store::build::Worker;
-use rix_core::store::LocalStore;
+use rix_core::local_store::LocalStore;
 use rix_util::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

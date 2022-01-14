@@ -1,6 +1,10 @@
-use crate::store::prelude::*;
+use rix_util::Encoding;
+
+use super::Derivation;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
+
+use crate::{Output, Store};
 
 impl Derivation {
   pub fn print<'drv, S: Store + ?Sized>(

@@ -1,7 +1,6 @@
+use super::{StorePath, StorePathSet};
+use rix_util::*;
 use std::time::SystemTime;
-
-use super::prelude::*;
-use super::StorePathSet;
 
 #[derive(derivative::Derivative)]
 #[derivative(Debug)]

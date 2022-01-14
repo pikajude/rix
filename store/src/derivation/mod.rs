@@ -1,8 +1,8 @@
-use super::prelude::*;
-use super::{FileIngestionMethod, HashType};
+use super::{FileIngestionMethod, HashType, Store, StorePath};
 pub use name::Name as DrvName;
 use parking_lot::Mutex;
 pub use print::Print;
+use rix_util::*;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;

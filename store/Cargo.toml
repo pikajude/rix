@@ -1,0 +1,15 @@
+[package]
+name = "rix-store"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.52"
+async-trait = "0.1.52"
+derivative = "2.2.0"
+derive_more = "0.99.17"
+lazy_static = "1.4.0"
+parking_lot = "0.11.2"
+rix-util = { path = "../util" }

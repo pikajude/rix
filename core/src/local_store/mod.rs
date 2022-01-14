@@ -1,10 +1,14 @@
-use super::*;
+use async_trait::async_trait;
 use nix::fcntl::{flock, FlockArg};
 use nix::unistd::getpid;
+use rix_store::*;
 use rix_util::hash::HashResult;
 use rix_util::rusqlite::Connection;
+use rix_util::*;
 use std::fs::{File, OpenOptions};
+use std::io::Read;
 use std::os::unix::prelude::AsRawFd;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 const QUERY_PATH_INFO: &str = "select id, hash, registrationTime, deriver, narSize, ultimate, \
@@ -37,7 +41,7 @@ impl LocalStore {
 
     db.lock().execute_batch(include_str!(concat!(
       env!("CARGO_MANIFEST_DIR"),
-      "/src/store/schema.sql"
+      "/src/local_store/schema.sql"
     )))?;
 
     let roots_file = temprootsdir.join(format!("{}", getpid()));

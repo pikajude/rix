@@ -1,9 +1,10 @@
-use super::prelude::*;
 use std::cmp::Ordering;
 use std::convert::TryInto;
 use std::fmt::{self, Debug, Display};
 use std::ops::Deref;
 use std::str::FromStr;
+
+use rix_util::*;
 
 const HASH_BYTES: usize = 20;
 const HASH_CHARS: usize = 32;

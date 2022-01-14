@@ -1,6 +1,6 @@
-use crate::store::{Store, StorePath};
 use crate::util::*;
 use once_cell::sync::OnceCell;
+use rix_store::{Store, StorePath};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::path::Path;

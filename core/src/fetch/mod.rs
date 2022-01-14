@@ -1,12 +1,12 @@
 mod archive;
 mod cache;
 
-use crate::store::{FileIngestionMethod, Repair, Store, StorePath, ValidPathInfo};
 use crate::util::nar::restore_path;
 use crate::util::*;
 use cache::Cache;
 use curl::easy::{Easy, HttpVersion, WriteError};
 use nix::sys::stat::{fchmodat, FchmodatFlags, Mode};
+use rix_store::{FileIngestionMethod, Repair, Store, StorePath, ValidPathInfo};
 use serde_json::{Map, Value};
 use slog::{Drain, Level};
 use std::collections::HashMap;
@@ -170,7 +170,7 @@ pub fn download_file<S: Store + ?Sized>(
       &mut nar_sink,
     )?;
     store_path = store.make_fixed_output_path(
-      crate::store::FileIngestionMethod::Flat,
+      FileIngestionMethod::Flat,
       download_result.hash,
       name,
       &Default::default(),
@@ -180,7 +180,7 @@ pub fn download_file<S: Store + ?Sized>(
     let mut path_info = ValidPathInfo::new(store_path.clone(), nar_hash);
     path_info.nar_size = Some(nar_size);
 
-    block_on(store.add_to_store(path_info, Box::new(nar_file), crate::store::Repair::Off))?;
+    block_on(store.add_to_store(path_info, Box::new(nar_file), Repair::Off))?;
   }
 
   cache.insert(store, &input_attrs, &inf, &store_path, immutable)?;
