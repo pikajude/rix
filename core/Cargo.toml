@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.52"
+async-recursion = "1.0.0"
 async-trait = "0.1.52"
 cfg-if = "1.0.0"
 crossbeam = "0.8.1"
@@ -20,6 +21,7 @@ rix-store = { path = "../store" }
 rix-syntax = { path = "../syntax" }
 rix-util = { path = "../util" }
 rm_rf = "0.6.1"
+sqlx = { version = "0.5.10", features = ["sqlite", "macros", "runtime-tokio-rustls"] }
 tee_readwrite = "0.1.0"
 tempfile = "3.2.0"
 tokio = { version = "1.15.0", features = ["macros", "rt", "rt-multi-thread"] }

@@ -458,7 +458,7 @@ pub async fn fetch(
 
   if let Some(e) = expected_hash {
     let actual = if unpack {
-      eval.store.get_path_info(&store_path)?.nar_hash
+      eval.store.get_path_info(&store_path).await?.nar_hash
     } else {
       Hash::hash_file(&real_path, HashType::SHA256)?.0
     };

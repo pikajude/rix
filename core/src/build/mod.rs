@@ -1,3 +1,4 @@
+use async_recursion::async_recursion;
 use rix_store::{Derivation, Store, StorePath};
 use rix_util::*;
 use std::collections::{HashMap, HashSet};
@@ -54,15 +55,16 @@ impl Worker {
     }
   }
 
-  pub fn add_needed_all(&mut self, path: &DerivationKey) -> Result<()> {
+  pub async fn add_needed_all(&mut self, path: &DerivationKey) -> Result<()> {
     let drv = self.store.read_derivation(path)?;
     for out in drv.outputs.keys() {
-      self.add_needed((path.clone(), out.clone()))?;
+      self.add_needed((path.clone(), out.clone())).await?;
     }
     Ok(())
   }
 
-  pub fn add_needed(&mut self, path: (DerivationKey, String)) -> Result<()> {
+  #[async_recursion]
+  pub async fn add_needed(&mut self, path: (DerivationKey, String)) -> Result<()> {
     if self.queue.dep_map.contains_key(&path) {
       return Ok(());
     }
@@ -74,7 +76,7 @@ impl Worker {
         let dep_out_path =
           input_drv.outputs[drv_out].get_path(&*self.store, &input_drv.name, drv_out)?;
         if let Some(p) = dep_out_path {
-          if self.store.is_valid_path(&*p)? {
+          if self.store.is_valid_path(&*p).await? {
             continue;
           }
         }
@@ -83,7 +85,7 @@ impl Worker {
     }
 
     for missing in &deps {
-      self.add_needed(missing.0.clone())?;
+      self.add_needed(missing.0.clone()).await?;
     }
 
     let cost = if drv.is_builtin() { 1 } else { 10 };

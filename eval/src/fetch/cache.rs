@@ -92,7 +92,7 @@ impl Cache {
         let immutable = row.get::<_, bool>(2)?;
         let timestamp = row.get::<_, i64>(3)?;
 
-        if !store.is_valid_path(&store_path)? {
+        if !block_on(store.is_valid_path(&store_path))? {
           debug!("ignoring disappeared cache entry");
           return Ok(None);
         }

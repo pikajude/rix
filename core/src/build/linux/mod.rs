@@ -188,11 +188,10 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
       for j in wanted {
         match outs.get(j) {
           Some((_, Some(realized_input))) => {
-            self.store.compute_fs_closure(
-              realized_input,
-              &mut self.input_paths,
-              Default::default(),
-            )?;
+            self
+              .store
+              .compute_fs_closure(realized_input, &mut self.input_paths, Default::default())
+              .await?;
           }
           Some((_, None)) => bail!(
             "derivation '{}' requires un-realised output '{}' from input derivation '{}'",
@@ -213,7 +212,8 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
     for p in &self.drv.input_sources {
       self
         .store
-        .compute_fs_closure(p, &mut self.input_paths, Default::default())?;
+        .compute_fs_closure(p, &mut self.input_paths, Default::default())
+        .await?;
     }
 
     debug!("adding input paths {:?}", self.input_paths);
@@ -379,11 +379,14 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
     let mut paths = StorePathSet::new();
     for dir in dirs_in_chroot.values() {
       if self.store.is_in_store(&dir.path) {
-        self.store.compute_fs_closure(
-          &self.store.parse_store_path(&dir.path)?,
-          &mut paths,
-          Default::default(),
-        )?;
+        self
+          .store
+          .compute_fs_closure(
+            &self.store.parse_store_path(&dir.path)?,
+            &mut paths,
+            Default::default(),
+          )
+          .await?;
       }
     }
     for cl in paths {

@@ -75,11 +75,11 @@ pub trait Store: Send + Sync {
     path.starts_with(self.store_path())
   }
 
-  fn is_valid_path(&self, path: &StorePath) -> Result<bool> {
-    self.query_path_info(path).map(|x| x.is_some())
+  async fn is_valid_path(&self, path: &StorePath) -> Result<bool> {
+    self.query_path_info(path).await.map(|x| x.is_some())
   }
 
-  fn compute_fs_closure(
+  async fn compute_fs_closure(
     &self,
     path: &StorePath,
     closure: &mut StorePathSet,
@@ -317,11 +317,12 @@ pub trait Store: Send + Sync {
     self.register_valid_paths(vec![info]).await
   }
 
-  fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>>;
+  async fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>>;
 
-  fn get_path_info(&self, path: &StorePath) -> Result<ValidPathInfo> {
+  async fn get_path_info(&self, path: &StorePath) -> Result<ValidPathInfo> {
     self
-      .query_path_info(path)?
+      .query_path_info(path)
+      .await?
       .ok_or_else(|| anyhow!("path {} is not valid", self.print_store_path(path)))
   }
 

@@ -3,8 +3,8 @@ use nix::fcntl::{flock, FlockArg};
 use nix::unistd::getpid;
 use rix_store::*;
 use rix_util::hash::HashResult;
-use rix_util::rusqlite::Connection;
 use rix_util::*;
+use sqlx::{Executor, Pool, SqliteExecutor, SqlitePool};
 use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Read};
 use std::os::unix::prelude::AsRawFd;
@@ -22,11 +22,12 @@ pub struct LocalStore {
   store: PathBuf,
   roots_file: PathBuf,
   roots_fd: File,
-  db: Sqlite,
+  // db: Sqlite,
+  conn: SqlitePool,
 }
 
 impl LocalStore {
-  pub fn new() -> Result<Self> {
+  pub async fn new() -> Result<Self> {
     let basedir = PathBuf::from("/rix");
     let storedir = basedir.join("store");
     let statedir = basedir.join("var/rix");
@@ -37,12 +38,16 @@ impl LocalStore {
     std::fs::create_dir_all(&dbdir)?;
     std::fs::create_dir_all(&temprootsdir)?;
 
-    let db = Sqlite::open(dbdir.join("rix.sqlite"))?;
+    // let db = Sqlite::open(dbdir.join("rix.sqlite"))?;
 
-    db.lock().execute_batch(include_str!(concat!(
-      env!("CARGO_MANIFEST_DIR"),
-      "/src/local_store/schema.sql"
-    )))?;
+    let conn = SqlitePool::connect(dbdir.join("rix.sqlite").display().to_string().as_str()).await?;
+
+    conn
+      .execute(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/local_store/schema.sql"
+      )))
+      .await?;
 
     let roots_file = temprootsdir.join(format!("{}", getpid()));
 
@@ -55,7 +60,7 @@ impl LocalStore {
     Ok(Self {
       basedir,
       store: storedir,
-      db,
+      conn,
       roots_file,
       roots_fd,
     })
@@ -68,7 +73,7 @@ impl Store for LocalStore {
     &self.store
   }
 
-  fn compute_fs_closure(
+  async fn compute_fs_closure(
     &self,
     path: &StorePath,
     paths: &mut StorePathSet,
@@ -80,10 +85,11 @@ impl Store for LocalStore {
     }
     paths.insert(path.clone());
     let qpi = self
-      .query_path_info(path)?
+      .query_path_info(path)
+      .await?
       .ok_or_else(|| anyhow!("invalid path {}'", self.print_store_path(path)))?;
     for r in &qpi.refs {
-      self.compute_fs_closure(r, paths, opts)?;
+      self.compute_fs_closure(r, paths, opts).await?;
     }
 
     if opts.include_outputs && path.is_derivation() {
@@ -92,8 +98,8 @@ impl Store for LocalStore {
         .outputs_and_opt_paths(self)?
       {
         if let Some(o) = maybe_out_path {
-          if self.is_valid_path(&o)? {
-            self.compute_fs_closure(&o, paths, opts)?;
+          if self.is_valid_path(&o).await? {
+            self.compute_fs_closure(&o, paths, opts).await?;
           }
         }
       }
@@ -101,8 +107,8 @@ impl Store for LocalStore {
 
     if opts.include_derivers {
       if let Some(d) = &qpi.deriver {
-        if self.is_valid_path(d)? {
-          self.compute_fs_closure(d, paths, opts)?;
+        if self.is_valid_path(d).await? {
+          self.compute_fs_closure(d, paths, opts).await?;
         }
       }
     }
@@ -192,7 +198,7 @@ impl Store for LocalStore {
     source: Box<dyn Read + Send>,
     _: Repair,
   ) -> Result<()> {
-    if !self.is_valid_path(&path_info.path)? {
+    if !self.is_valid_path(&path_info.path).await? {
       let real_path = self.to_real_path(&path_info.path);
 
       rm_rf::ensure_removed(&real_path)?;
@@ -261,7 +267,7 @@ impl Store for LocalStore {
 
     let dst_path = self.make_fixed_output_path(method, hash, name, &Default::default(), false)?;
 
-    if !self.is_valid_path(&dst_path)? {
+    if !self.is_valid_path(&dst_path).await? {
       let real_path = self.to_real_path(&dst_path);
 
       rm_rf::ensure_removed(&real_path)?;
@@ -279,112 +285,113 @@ impl Store for LocalStore {
     Ok(dst_path)
   }
 
-  fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>> {
-    let db = self.db.lock();
+  async fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>> {
+    let row = match sqlx::query!(
+      "select * from ValidPaths where path = ?",
+      self.print_store_path(path)
+    )
+    .fetch_optional(&self.conn)
+    .await?
+    {
+      Some(x) => x,
+      None => return Ok(None),
+    };
 
-    let mut stmt = db.prepare(QUERY_PATH_INFO)?;
+    let hash = Hash::decode(row.hash).with_context(|| {
+      format!(
+        "path-info entry for `{}' is invalid",
+        self.print_store_path(path)
+      )
+    })?;
 
-    let mut iter = stmt.query_and_then::<_, anyhow::Error, _, _>(
-      params![self.print_store_path(path)],
-      |row| {
-        let hash = Hash::decode(row.get::<_, String>("hash")?).with_context(|| {
-          format!(
-            "path-info entry for `{}' is invalid",
-            self.print_store_path(path)
-          )
-        })?;
+    let mut path_info = ValidPathInfo::new(path.clone(), hash);
 
-        let mut path_info = ValidPathInfo::new(path.clone(), hash);
+    path_info.id = row.id;
+    path_info.registration_time =
+      Some(SystemTime::UNIX_EPOCH + Duration::from_secs(row.registrationTime as u64));
 
-        path_info.id = row.get::<_, i64>("id")?;
-        path_info.registration_time = Some(
-          SystemTime::UNIX_EPOCH
-            + Duration::from_secs(row.get::<_, i64>("registrationTime")? as u64),
-        );
-
-        let deriver_path = row.get::<_, String>("deriver")?;
-        if !deriver_path.is_empty() {
-          path_info.deriver = Some(self.parse_store_path(Path::new(&deriver_path))?);
-        }
-
-        path_info.nar_size = Some(row.get::<_, i64>("narSize")? as _);
-        path_info.ultimate = row.get("ultimate")?;
-
-        Ok(path_info)
-      },
-    )?;
-
-    if let Some(mut info) = iter.next().transpose()? {
-      let mut stmt = db.prepare(QUERY_REFS)?;
-
-      for ref_ in stmt.query_and_then(params![info.id], |row| row.get::<_, String>("path"))? {
-        info.refs.insert(self.parse_store_path(Path::new(&ref_?))?);
-      }
-
-      Ok(Some(info))
-    } else {
-      Ok(None)
+    if let Some(d) = row.deriver {
+      path_info.deriver = Some(self.parse_store_path(Path::new(&d))?);
     }
+
+    path_info.nar_size = row.narSize.map(|x| x as usize);
+    path_info.ultimate = row.ultimate == Some(1);
+
+    let paths = sqlx::query!(
+      "select path from Refs join ValidPaths on reference = id where referrer = ?",
+      path_info.id
+    )
+    .fetch_all(&self.conn)
+    .await?;
+
+    for p in paths {
+      path_info
+        .refs
+        .insert(self.parse_store_path(Path::new(&p.path))?);
+    }
+
+    Ok(Some(path_info))
   }
 
   async fn register_valid_paths(&self, mut infos: Vec<ValidPathInfo>) -> Result<()> {
-    const REGISTER_VALID: &str = "insert into ValidPaths (path, hash, registrationTime, deriver, \
-                                  narSize, ultimate, sigs, ca) values (?, ?, ?, ?, ?, ?, ?, ?)";
-    const UPDATE_VALID: &str =
-      "update ValidPaths set narSize = ?, hash = ?, ultimate = ?, sigs = ?, ca = ? where id = ?";
-
-    let mut conn = self.db.lock();
-    let db = conn.transaction()?;
+    let mut db = self.conn.begin().await?;
 
     for info in &mut infos {
       let path = self.print_store_path(&info.path);
 
-      if let Some(current_id) = lookup_path_id(&db, &path)? {
-        db.execute(
-          UPDATE_VALID,
-          params![
-            info.nar_size.unwrap_or_default() as i64,
-            info.nar_hash.encode_with_type(Encoding::Base16),
-            info.ultimate,
-            "",
-            "",
-            current_id
-          ],
-        )?;
+      if let Some(current_id) = lookup_path_id(&mut db, &path).await? {
+        sqlx::query!(
+          "update ValidPaths set narSize = ?, hash = ?, ultimate = ?, sigs = ?, ca = ? where id = \
+           ?",
+          info.nar_size.unwrap_or_default() as i64,
+          info.nar_hash.encode_with_type(Encoding::Base16),
+          info.ultimate,
+          "",
+          "",
+          current_id
+        )
+        .execute(&mut db)
+        .await?;
         info.id = current_id;
       } else {
-        db.execute(
-          REGISTER_VALID,
-          params![
-            path,
-            info.nar_hash.encode_with_type(Encoding::Base16),
-            info.registration_time_sql(),
-            info
-              .deriver
-              .as_ref()
-              .map_or_else(String::new, |d| self.print_store_path(d)),
-            info.nar_size.unwrap_or_default() as i64,
-            info.ultimate,
-            "",
-            ""
-          ],
-        )?;
-        info.id = db.last_insert_rowid();
+        let query_result = sqlx::query!(
+          "insert into ValidPaths (path, hash, registrationTime, deriver, narSize, ultimate, \
+           sigs, ca) values (?, ?, ?, ?, ?, ?, ?, ?)",
+          path,
+          info.nar_hash.encode_with_type(Encoding::Base16),
+          info.registration_time_sql(),
+          info
+            .deriver
+            .as_ref()
+            .map_or_else(String::new, |d| self.print_store_path(d)),
+          info.nar_size.unwrap_or_default() as i64,
+          info.ultimate,
+          "",
+          ""
+        )
+        .execute(&mut db)
+        .await?;
+        info.id = query_result.last_insert_rowid();
       }
     }
 
     for info in infos {
       let referrer = info.id;
       for r in &info.refs {
-        let reference = lookup_path_id(&db, &self.print_store_path(r))?.expect("bad ref");
-        db.execute(
+        let reference = lookup_path_id(&mut db, &self.print_store_path(r))
+          .await?
+          .expect("bad ref");
+        sqlx::query!(
           "insert or replace into Refs (referrer, reference) values (?, ?)",
-          params![referrer, reference],
-        )?;
+          referrer,
+          reference
+        )
+        .execute(&mut db)
+        .await?;
       }
     }
 
-    db.commit()?;
+    db.commit().await?;
 
     Ok(())
   }
@@ -419,12 +426,10 @@ impl Store for LocalStore {
   }
 }
 
-fn lookup_path_id(conn: &Connection, path: &str) -> rix_util::rusqlite::Result<Option<i64>> {
-  conn
-    .query_row::<i64, _, _>(
-      "select id from ValidPaths where path = ?",
-      params![&path],
-      |r| r.get("id"),
-    )
-    .optional()
+async fn lookup_path_id<'c, E: SqliteExecutor<'c>>(
+  conn: E,
+  path: &str,
+) -> sqlx::Result<Option<i64>> {
+  let query = sqlx::query!("select id from ValidPaths where path = ?", path);
+  query.fetch_optional(conn).await.map(|x| x.map(|y| y.id))
 }
