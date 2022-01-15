@@ -169,7 +169,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
     Ok(())
   }
 
-  async fn run(mut self) -> Result<()> {
+  fn run(mut self) -> Result<()> {
     static NSS_INIT: Once = Once::new();
 
     if self.drv.is_builtin() {
@@ -700,8 +700,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
 
         self
           .store
-          .register_valid_paths(infos.into_values().collect())
-          .await?;
+          .register_valid_paths(infos.into_values().collect())?;
 
         Ok(())
       }
@@ -1101,7 +1100,7 @@ fn rewrite(s: &str, rewrites: &HashMap<String, String>) -> String {
   s.into_owned()
 }
 
-pub(super) async fn build<S: Store + ?Sized>(
+pub(super) fn build<S: Store + ?Sized>(
   store: &S,
   _: &Scope<'_>,
   path: &StorePath,
@@ -1120,5 +1119,4 @@ pub(super) async fn build<S: Store + ?Sized>(
     input_paths: Default::default(),
   }
   .run()
-  .await
 }

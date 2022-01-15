@@ -1205,7 +1205,7 @@ fn json_to_value(eval: &Eval, pos: Pos, value: JSON) -> Result<Value> {
 fn mk_nix_path() -> Value {
   let mut entries = vec![];
   for entry in get_nix_path().into_iter().chain(std::iter::once(format!(
-    "nix={}/src/eval/corepkgs",
+    "nix={}/src/corepkgs",
     env!("CARGO_MANIFEST_DIR")
   ))) {
     let mut parts = entry.splitn(2, '=');

@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use nix::fcntl::{flock, FlockArg};
 use nix::unistd::getpid;
 use rix_store::*;
@@ -62,7 +61,6 @@ impl LocalStore {
   }
 }
 
-#[async_trait]
 impl Store for LocalStore {
   fn store_path(&self) -> &Path {
     &self.store
@@ -167,7 +165,7 @@ impl Store for LocalStore {
       });
 
       let store_path =
-        block_on(self.add_dump_to_store(Box::new(read_side), name, method, hash_type, repair))?;
+        self.add_dump_to_store(Box::new(read_side), name, method, hash_type, repair)?;
       hdl.join().unwrap()?;
       Ok(store_path)
     })
@@ -186,7 +184,7 @@ impl Store for LocalStore {
     Ok(())
   }
 
-  async fn add_to_store(
+  fn add_to_store(
     &self,
     path_info: ValidPathInfo,
     source: Box<dyn Read + Send>,
@@ -230,13 +228,13 @@ impl Store for LocalStore {
         );
       }
 
-      self.register_valid_path(path_info).await?;
+      self.register_valid_path(path_info)?;
     }
 
     Ok(())
   }
 
-  async fn add_dump_to_store(
+  fn add_dump_to_store(
     &self,
     source: Box<dyn Read + Send>,
     name: &str,
@@ -274,7 +272,7 @@ impl Store for LocalStore {
     let mut info = ValidPathInfo::new(dst_path.clone(), hash);
     info.nar_size = Some(size);
 
-    self.register_valid_path(info).await?;
+    self.register_valid_path(info)?;
 
     Ok(dst_path)
   }
@@ -327,7 +325,7 @@ impl Store for LocalStore {
     }
   }
 
-  async fn register_valid_paths(&self, mut infos: Vec<ValidPathInfo>) -> Result<()> {
+  fn register_valid_paths(&self, mut infos: Vec<ValidPathInfo>) -> Result<()> {
     const REGISTER_VALID: &str = "insert into ValidPaths (path, hash, registrationTime, deriver, \
                                   narSize, ultimate, sigs, ca) values (?, ?, ?, ?, ?, ?, ?, ?)";
     const UPDATE_VALID: &str =

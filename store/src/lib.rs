@@ -4,7 +4,6 @@ pub mod path;
 pub use self::path::{Hash as StorePathHash, Path as StorePath};
 pub mod derivation;
 pub mod path_info;
-use async_trait::async_trait;
 pub use derivation::{Derivation, DerivationType, DrvName, HashModulo, Output};
 pub use path_info::ValidPathInfo;
 use rix_util::*;
@@ -43,7 +42,6 @@ pub struct ClosureOpts {
   pub include_derivers: bool,
 }
 
-#[async_trait]
 pub trait Store: Send + Sync {
   fn store_path(&self) -> &Path;
 
@@ -280,7 +278,7 @@ pub trait Store: Send + Sync {
     repair: Repair,
   ) -> Result<StorePath>;
 
-  async fn add_dump_to_store(
+  fn add_dump_to_store(
     &self,
     source: Box<dyn Read + Send>,
     name: &str,
@@ -289,7 +287,7 @@ pub trait Store: Send + Sync {
     repair: Repair,
   ) -> Result<StorePath>;
 
-  async fn add_to_store(
+  fn add_to_store(
     &self,
     path_info: ValidPathInfo,
     source: Box<dyn Read + Send>,
@@ -311,10 +309,10 @@ pub trait Store: Send + Sync {
 
   fn check_uri(&self, uri: &str) -> Result<()>;
 
-  async fn register_valid_paths(&self, infos: Vec<ValidPathInfo>) -> Result<()>;
+  fn register_valid_paths(&self, infos: Vec<ValidPathInfo>) -> Result<()>;
 
-  async fn register_valid_path(&self, info: ValidPathInfo) -> Result<()> {
-    self.register_valid_paths(vec![info]).await
+  fn register_valid_path(&self, info: ValidPathInfo) -> Result<()> {
+    self.register_valid_paths(vec![info])
   }
 
   fn query_path_info(&self, path: &StorePath) -> Result<Option<ValidPathInfo>>;

@@ -183,7 +183,7 @@ pub fn download_file<S: Store + ?Sized>(
     let mut path_info = ValidPathInfo::new(store_path.clone(), nar_hash);
     path_info.nar_size = Some(nar_size);
 
-    block_on(store.add_to_store(path_info, Box::new(nar_file), Repair::Off))?;
+    store.add_to_store(path_info, Box::new(nar_file), Repair::Off)?;
   }
 
   cache.insert(store, &input_attrs, &inf, &store_path, immutable)?;
