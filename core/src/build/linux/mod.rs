@@ -86,6 +86,7 @@ struct Build<'a, S: Store + ?Sized> {
   build_user: UserLock,
   env: ProcessEnv,
   input_paths: StorePathSet,
+  initial_outputs: HashMap<String, InitialOutput>,
 }
 
 impl<'a, S: Store + ?Sized> Build<'a, S> {
@@ -112,6 +113,23 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
       )),
       HashModulo::FixedOutput(e) => Ok(Box::new(e.into_iter())),
     }
+  }
+
+  fn check_path_validity(&mut self) -> Result<()> {
+    for (name, (_, path)) in self.drv.outputs_and_opt_paths(self.store)? {
+      let info = self
+        .initial_outputs
+        .get_mut(&name)
+        .expect("missing initial output");
+      info.wanted = true;
+      if let Some(p) = path {
+        info.known = Some(InitialOutputStatus {
+          path: p,
+          status: PathStatus::Absent,
+        });
+      }
+    }
+    Ok(())
   }
 
   fn chown_to_builder<P: AsRef<Path>>(&self, path: P) -> Result<()> {
@@ -219,7 +237,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
 
     debug!("adding input paths {:?}", self.input_paths);
 
-    let initial_outputs = self
+    self.initial_outputs = self
       .static_hashes()?
       .map(|(name, hash)| {
         (
@@ -232,6 +250,8 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         )
       })
       .collect::<HashMap<_, _>>();
+
+    self.check_path_validity()?;
 
     let build_log_path = self.store.log_file_of(self.drv_path);
 
@@ -262,7 +282,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
     let mut input_rewrites = HashMap::new();
     let mut scratch_outputs = HashMap::new();
     let mut redirected_outputs = HashMap::new();
-    for (output_name, status) in initial_outputs.iter() {
+    for (output_name, status) in self.initial_outputs.iter() {
       let scratch_path = match status.known {
         None => self.fallback_from_output(output_name)?,
         Some(ref k) => {
@@ -278,6 +298,12 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         self.store.print_store_path(&scratch_path),
       );
       scratch_outputs.insert(output_name.clone(), scratch_path.clone());
+
+      debug!(
+        "e";
+        "status" => ?status,
+        "scratch_path" => %scratch_path
+      );
 
       let fixed_final_path = match status.known {
         None => continue,
@@ -1117,6 +1143,7 @@ pub(super) fn build<S: Store + ?Sized>(
     drv,
     env: Default::default(),
     input_paths: Default::default(),
+    initial_outputs: Default::default(),
   }
   .run()
 }
