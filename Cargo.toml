@@ -1,2 +1,2 @@
 [workspace]
-members = ["core", "eval", "store", "syntax", "util"]
+members = ["core", "eval", "settings-macro", "store", "syntax", "util"]

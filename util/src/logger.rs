@@ -21,7 +21,7 @@ fn init_logger() -> Result<()> {
   Ok(())
 }
 
-pub fn init() -> Result<()> {
+pub(crate) fn init() -> Result<()> {
   LOGGER_INIT.get_or_try_init(init_logger)?;
 
   Ok(())

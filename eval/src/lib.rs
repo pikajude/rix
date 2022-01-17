@@ -56,7 +56,7 @@ impl Eval {
 
   #[cfg(test)]
   pub fn test() -> Self {
-    logger::init().expect("unable to init logger");
+    init_rix().expect("unable to initialize");
     Self::new(Arc::new(
       rix_core::local_store::LocalStore::new().expect("unable to open local store"),
     ))

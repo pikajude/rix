@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = "1.0.52"
 cfg-if = "1.0.0"
 crossbeam = "0.8.1"
+ctrlc = "3.2.1"
 derivative = "2.2.0"
 libc = "0.2.112"
 maplit = "1.0.2"
@@ -14,10 +15,11 @@ nix = "0.23.1"
 num_cpus = "1.13.1"
 once_cell = "1.9.0"
 parking_lot = "0.11.2"
-rix-syntax = { path = "../syntax" }
-rix-util = { path = "../util" }
 rix-eval = { path = "../eval" }
 rix-store = { path = "../store" }
+rix-syntax = { path = "../syntax" }
+rix-util = { path = "../util" }
+rix-settings-macro = { path = "../settings-macro" }
 rm_rf = "0.6.1"
 tee_readwrite = "0.1.0"
 tempfile = "3.2.0"

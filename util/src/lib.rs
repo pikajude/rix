@@ -38,6 +38,7 @@ use std::os::unix::prelude::FromRawFd;
 use std::path::{Path, PathBuf};
 use std::process::Termination;
 use std::str::pattern::{Pattern, Searcher};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub mod base32;
 mod cons_list;
@@ -81,27 +82,26 @@ pub fn show_diagnostic(diag: &Diagnostic<FileId>) -> Result<()> {
   Ok(())
 }
 
-pub fn break_str<'a, P: Pattern<'a>>(s: &'a str, pattern: P) -> Option<(&'a str, &'a str)> {
-  let mut search = pattern.into_searcher(s);
-  let (start, end) = search.next_match()?;
-
-  Some((&s[..start], &s[end..]))
-}
-
-pub trait PathExt {
-  fn append<P: AsRef<Path>>(&self, other: P) -> PathBuf;
-}
-
-impl PathExt for Path {
-  fn append<P: AsRef<Path>>(&self, other: P) -> PathBuf {
-    let other = other.as_ref();
-    self.join(other.strip_prefix("/").unwrap_or(other))
-  }
-}
-
 pub fn pipe() -> Result<(impl std::io::Read, impl std::io::Write)> {
   let (read, write) = pipe2(OFlag::O_CLOEXEC)?;
   Ok(unsafe { (File::from_raw_fd(read), File::from_raw_fd(write)) })
+}
+
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+pub fn interrupted() -> bool {
+  INTERRUPTED.load(Ordering::Acquire)
+}
+
+pub fn init_rix() -> Result<()> {
+  self::logger::init()?;
+
+  ctrlc::set_handler(|| {
+    INTERRUPTED.store(true, Ordering::Release);
+    eprintln!("received interrupt!");
+  })?;
+
+  Ok(())
 }
 
 /// A newtype wrapper around [`anyhow::Result`]. The [`Termination`] impl acts
@@ -160,6 +160,30 @@ where
       Err(e) => Self(Err(anyhow::Error::from(e))),
       Ok(_) => unreachable!(),
     }
+  }
+}
+
+pub trait PathExt {
+  fn append<P: AsRef<Path>>(&self, other: P) -> PathBuf;
+}
+
+impl PathExt for Path {
+  fn append<P: AsRef<Path>>(&self, other: P) -> PathBuf {
+    let other = other.as_ref();
+    self.join(other.strip_prefix("/").unwrap_or(other))
+  }
+}
+
+pub trait StrExt {
+  fn break_on<'a, P: Pattern<'a>>(&'a self, pattern: P) -> Option<(&'a Self, &'a Self)>;
+}
+
+impl StrExt for str {
+  fn break_on<'a, P: Pattern<'a>>(&'a self, pattern: P) -> Option<(&'a Self, &'a Self)> {
+    let mut search = pattern.into_searcher(self);
+    let (start, end) = search.next_match()?;
+
+    Some((&self[..start], &self[end..]))
   }
 }
 

@@ -1,6 +1,7 @@
 use once_cell::sync::OnceCell;
+use rix_settings_macro::Settings;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum SandboxMode {
@@ -34,14 +35,32 @@ impl Default for BuildMode {
   }
 }
 
-#[derive(Debug)]
+#[inline]
+fn default_paths() -> HashSet<String> {
+  maplit::hashset!(
+    "/bin/sh=/nix/store/2cxw7z66r105q74f892kns108mqczrqz-bash-5.1-p12-x86_64-unknown-linux-musl/\
+     bin/bash"
+      .into()
+  )
+}
+
+#[derive(Debug, Settings)]
 pub struct Settings {
+  #[setting(default = "nixbld", get = "deref")]
   build_users_group: String,
+  #[setting(default_fn = "num_cpus::get")]
   build_cores: usize,
   sandbox_mode: SandboxMode,
+  #[setting(default = "/build", get = "deref")]
   sandbox_build_dir: PathBuf,
+  #[setting(default_fn = "default_paths", get = "ref")]
   sandbox_paths: HashSet<String>,
   build_mode: BuildMode,
+  /// Whether to prevent certain dangerous system calls, such as creation of
+  /// setuid/setgid files or adding ACLs or extended attributes. Only disable
+  /// this if you're aware of the security implications.
+  #[setting(default = true)]
+  filter_syscalls: bool,
 }
 
 static SETTINGS: OnceCell<Settings> = OnceCell::new();
@@ -54,43 +73,6 @@ impl Settings {
   pub fn init_with<F: FnOnce(Self) -> Self>(init_fn: F) {
     if SETTINGS.set(init_fn(Self::default())).is_err() {
       panic!("Settings have already been initialized")
-    }
-  }
-
-  pub fn build_users_group(&self) -> &str {
-    self.build_users_group.as_str()
-  }
-
-  pub fn sandbox_mode(&self) -> SandboxMode {
-    self.sandbox_mode
-  }
-
-  pub fn build_cores(&self) -> usize {
-    self.build_cores
-  }
-
-  pub fn build_mode(&self) -> BuildMode {
-    self.build_mode
-  }
-
-  pub fn sandbox_build_dir(&self) -> &Path {
-    &self.sandbox_build_dir
-  }
-
-  pub fn sandbox_paths(&self) -> &HashSet<String> {
-    &self.sandbox_paths
-  }
-}
-
-impl Default for Settings {
-  fn default() -> Self {
-    Self {
-      build_users_group: "nixbld".into(),
-      build_cores: num_cpus::get(),
-      sandbox_mode: SandboxMode::default(),
-      sandbox_build_dir: PathBuf::from("/build"),
-      sandbox_paths: maplit::hashset! {},
-      build_mode: BuildMode::default(),
     }
   }
 }

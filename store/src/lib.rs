@@ -48,7 +48,7 @@ pub trait Store: Send + Sync {
   fn parse_store_path(&self, path: &Path) -> Result<StorePath> {
     if path.parent() != Some(self.store_path()) {
       bail!(
-        "path `{}' is not a direct descendant of the Nix store",
+        "path '{}' is not a direct descendant of the Nix store",
         path.display()
       );
     }

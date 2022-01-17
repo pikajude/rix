@@ -6,7 +6,7 @@ use rix_store::{Derivation, FileIngestionMethod, Repair};
 use std::collections::BTreeSet;
 
 fn decode_context(s: &str) -> (&str, &str) {
-  break_str(s, '!').map_or(("", s), |(x, y)| (y, x))
+  s.break_on('!').map_or(("", s), |(x, y)| (y, x))
 }
 
 pub fn prim_derivation_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {

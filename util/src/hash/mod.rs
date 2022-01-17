@@ -139,9 +139,9 @@ impl Hash {
 
   pub fn decode<S: AsRef<str>>(input: S) -> Result<Self> {
     let input = input.as_ref();
-    if let Some((ty, rest)) = break_str(input, ':') {
+    if let Some((ty, rest)) = input.break_on(':') {
       Ok(Self::decode_with_type(rest, ty.parse()?, false)?)
-    } else if let Some((ty, rest)) = break_str(input, '-') {
+    } else if let Some((ty, rest)) = input.break_on('-') {
       Ok(Self::decode_with_type(rest, ty.parse()?, true)?)
     } else {
       bail!("untyped input hash")

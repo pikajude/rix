@@ -336,7 +336,7 @@ fn curl(mut req: RequestInfo) -> Result<CurlDownload> {
         got_status200 = true;
       }
       trace!("header: {:?}", header_line);
-      if let Some((name, val)) = break_str(header_line.trim_end(), ':') {
+      if let Some((name, val)) = header_line.trim_end().break_on(':') {
         if name.eq_ignore_ascii_case("ETag") {
           etag = Some(val.strip_prefix(' ').unwrap_or(val).to_string());
           // hack for GitHub, which returns 200 OK even if the etag matches

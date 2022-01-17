@@ -9,6 +9,7 @@ use std::{fs, slice};
 use super::*;
 use crate::lock::{UserLock, UserLocker};
 use crate::settings::{settings, BuildMode, SandboxMode};
+use nix::sys::signal::{kill, Signal};
 use rix_eval::fetch::builtin_fetchurl;
 use rix_store::{StorePathSet, ValidPathInfo};
 mod sys_ext;
@@ -274,10 +275,10 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
     }
 
     let build_tmp_dir = tempfile::Builder::new()
-      .prefix(&format!("nix-build-{}-", &self.drv.name))
+      .prefix(&format!("rix-build-{}-", &self.drv.name))
       .tempdir()?;
 
-    self.chown_to_builder(build_tmp_dir.path())?;
+    self.chown_to_builder(&build_tmp_dir)?;
 
     let mut input_rewrites = HashMap::new();
     let mut scratch_outputs = HashMap::new();
@@ -298,12 +299,6 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         self.store.print_store_path(&scratch_path),
       );
       scratch_outputs.insert(output_name.clone(), scratch_path.clone());
-
-      debug!(
-        "e";
-        "status" => ?status,
-        "scratch_path" => %scratch_path
-      );
 
       let fixed_final_path = match status.known {
         None => continue,
@@ -372,7 +367,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         } else {
           g.as_str()
         };
-        match break_str(g, '=') {
+        match g.break_on('=') {
           Some((src, dest)) => {
             dirs_in_chroot.insert(
               PathBuf::from(src),
@@ -398,7 +393,7 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
     dirs_in_chroot.insert(
       PathBuf::from(tmpdir_in_sandbox),
       ChrootPath {
-        path: build_tmp_dir.path().to_path_buf(),
+        path: build_tmp_dir.path().into(),
         optional: false,
       },
     );
@@ -536,23 +531,26 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         }
 
         let child_pid = sys_ext::clone(
-          move || match run_child(RunChild {
-            builder_write,
-            user_ns_read,
-            chroot_root: &chroot_root,
-            chroot_store_dir: &chroot_store_dir,
-            dirs_in_chroot,
-            tmpdir_in_sandbox,
-            private_network,
-            drv: self.drv,
-            env: &self.env,
-            input_rewrites: &input_rewrites,
-          }) {
-            Err(e) => {
-              eprint!("\x01{:?}\x01", e);
-              1
+          move || {
+            let child = RunChild {
+              builder_write,
+              user_ns_read,
+              chroot_root: &chroot_root,
+              chroot_store_dir: &chroot_store_dir,
+              dirs_in_chroot,
+              tmpdir_in_sandbox,
+              private_network,
+              drv: self.drv,
+              env: &self.env,
+              input_rewrites: &input_rewrites,
+            };
+            match run_child(child) {
+              Err(e) => {
+                eprint!("\x01{:?}\x01", e);
+                1
+              }
+              Ok(_) => 0,
             }
-            Ok(_) => 0,
           },
           stack_slice,
           clone_flags,
@@ -624,6 +622,10 @@ impl<'a, S: Store + ?Sized> Build<'a, S> {
         drop(user_ns_write);
 
         loop {
+          if interrupted() {
+            kill(pid, Some(Signal::SIGKILL))?;
+            bail!("interrupted by user");
+          }
           line.clear();
           match builder_read.read_line(&mut line) {
             Err(e) if e.raw_os_error() == Some(libc::EIO) => break,
@@ -747,7 +749,7 @@ fn do_bind<P: AsRef<Path>, Q: AsRef<Path>>(source: P, target: Q, optional: bool)
       }
     }
   };
-  eprintln!(
+  debug!(
     "bind mounting '{}' to '{}'",
     source.display(),
     target.display()
@@ -781,8 +783,6 @@ fn chmod<P: NixPath + ?Sized>(path: &P, mode: u32) -> Result<(), nix::Error> {
   )
 }
 
-// TODO: SIGSYS, i'm doing something wrong here
-#[allow(dead_code)]
 fn init_seccomp() -> Result<()> {
   use scmp_compare::SCMP_CMP_MASKED_EQ;
   use seccomp_sys::*;
@@ -805,14 +805,15 @@ fn init_seccomp() -> Result<()> {
   }
 
   unsafe {
-    let ctx = seccomp_init(SCMP_ACT_ALLOW);
+    let ctx = Dealloc(seccomp_init(SCMP_ACT_ALLOW));
     if ctx.is_null() {
       bail!(Errno::last());
     }
 
-    let ctx = Dealloc(ctx);
+    Errno::result(seccomp_arch_add(*ctx, scmp_arch::SCMP_ARCH_X86 as _))?;
+    Errno::result(seccomp_arch_add(*ctx, scmp_arch::SCMP_ARCH_X32 as _))?;
 
-    for perm in &[libc::S_ISUID, libc::S_ISGID] {
+    for &perm in &[libc::S_ISUID, libc::S_ISGID] {
       Errno::result(seccomp_rule_add(
         *ctx,
         SCMP_ACT_ERRNO(libc::EPERM as _),
@@ -821,8 +822,8 @@ fn init_seccomp() -> Result<()> {
         scmp_arg_cmp {
           arg: 1,
           op: SCMP_CMP_MASKED_EQ,
-          datum_a: *perm as _,
-          datum_b: *perm as _,
+          datum_a: perm as _,
+          datum_b: perm as _,
         },
       ))?;
 
@@ -834,8 +835,8 @@ fn init_seccomp() -> Result<()> {
         scmp_arg_cmp {
           arg: 1,
           op: SCMP_CMP_MASKED_EQ,
-          datum_a: *perm as _,
-          datum_b: *perm as _,
+          datum_a: perm as _,
+          datum_b: perm as _,
         },
       ))?;
 
@@ -847,8 +848,8 @@ fn init_seccomp() -> Result<()> {
         scmp_arg_cmp {
           arg: 2,
           op: SCMP_CMP_MASKED_EQ,
-          datum_a: *perm as _,
-          datum_b: *perm as _,
+          datum_a: perm as _,
+          datum_b: perm as _,
         },
       ))?;
     }
@@ -919,7 +920,7 @@ fn run_child(
   dup2(fdnull, libc::STDIN_FILENO)?;
   close(fdnull)?;
 
-  // init_seccomp()?;
+  init_seccomp()?;
 
   let contents = user_ns_read
     .recv()
