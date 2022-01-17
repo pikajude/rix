@@ -73,6 +73,7 @@ impl SettingReceiver {
     let doc_attrs = self.attrs.iter().filter(|a| a.path.is_ident("doc"));
     quote! {
       #(#doc_attrs)*
+      #[inline]
       pub fn #ident(&self) -> #real_type {
         #and self.#ident
       }
