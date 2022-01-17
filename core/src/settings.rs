@@ -37,11 +37,7 @@ impl Default for BuildMode {
 
 #[inline]
 fn default_paths() -> HashSet<String> {
-  maplit::hashset!(
-    "/bin/sh=/nix/store/2cxw7z66r105q74f892kns108mqczrqz-bash-5.1-p12-x86_64-unknown-linux-musl/\
-     bin/bash"
-      .into()
-  )
+  maplit::hashset!(concat!("/bin/sh=", env!("BOOTSTRAP_SHELL")).into())
 }
 
 #[derive(Debug, Settings)]
