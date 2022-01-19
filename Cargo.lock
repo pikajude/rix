@@ -1266,6 +1266,7 @@ dependencies = [
  "rix-util",
  "rlimit",
  "rm_rf",
+ "scopeguard",
  "seccomp-sys",
  "tee_readwrite",
  "tempfile",

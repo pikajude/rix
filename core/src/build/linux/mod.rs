@@ -786,36 +786,23 @@ fn chmod<P: NixPath + ?Sized>(path: &P, mode: u32) -> Result<(), nix::Error> {
 fn init_seccomp() -> Result<()> {
   use scmp_compare::SCMP_CMP_MASKED_EQ;
   use seccomp_sys::*;
-  use std::ops::Deref;
 
-  struct Dealloc(*mut libc::c_void);
-
-  impl Drop for Dealloc {
-    fn drop(&mut self) {
-      unsafe { seccomp_release(self.0) }
-    }
+  let ctx = unsafe { seccomp_init(SCMP_ACT_ALLOW) };
+  if ctx.is_null() {
+    bail!(Errno::last());
   }
 
-  impl Deref for Dealloc {
-    type Target = *mut libc::c_void;
-
-    fn deref(&self) -> &Self::Target {
-      &self.0
-    }
+  scopeguard::defer! {
+    unsafe { seccomp_release(ctx); }
   }
 
   unsafe {
-    let ctx = Dealloc(seccomp_init(SCMP_ACT_ALLOW));
-    if ctx.is_null() {
-      bail!(Errno::last());
-    }
-
-    Errno::result(seccomp_arch_add(*ctx, scmp_arch::SCMP_ARCH_X86 as _))?;
-    Errno::result(seccomp_arch_add(*ctx, scmp_arch::SCMP_ARCH_X32 as _))?;
+    Errno::result(seccomp_arch_add(ctx, scmp_arch::SCMP_ARCH_X86 as _))?;
+    Errno::result(seccomp_arch_add(ctx, scmp_arch::SCMP_ARCH_X32 as _))?;
 
     for &perm in &[libc::S_ISUID, libc::S_ISGID] {
       Errno::result(seccomp_rule_add(
-        *ctx,
+        ctx,
         SCMP_ACT_ERRNO(libc::EPERM as _),
         libc::SYS_chmod as _,
         1,
@@ -828,7 +815,7 @@ fn init_seccomp() -> Result<()> {
       ))?;
 
       Errno::result(seccomp_rule_add(
-        *ctx,
+        ctx,
         SCMP_ACT_ERRNO(libc::EPERM as _),
         libc::SYS_fchmod as _,
         1,
@@ -841,7 +828,7 @@ fn init_seccomp() -> Result<()> {
       ))?;
 
       Errno::result(seccomp_rule_add(
-        *ctx,
+        ctx,
         SCMP_ACT_ERRNO(libc::EPERM as _),
         libc::SYS_fchmodat as _,
         1,
@@ -855,31 +842,31 @@ fn init_seccomp() -> Result<()> {
     }
 
     Errno::result(seccomp_rule_add(
-      *ctx,
+      ctx,
       SCMP_ACT_ERRNO(libc::ENOTSUP as _),
       libc::SYS_setxattr as _,
       0,
     ))?;
     Errno::result(seccomp_rule_add(
-      *ctx,
+      ctx,
       SCMP_ACT_ERRNO(libc::ENOTSUP as _),
       libc::SYS_lsetxattr as _,
       0,
     ))?;
     Errno::result(seccomp_rule_add(
-      *ctx,
+      ctx,
       SCMP_ACT_ERRNO(libc::ENOTSUP as _),
       libc::SYS_fsetxattr as _,
       0,
     ))?;
 
     Errno::result(seccomp_attr_set(
-      *ctx,
+      ctx,
       scmp_filter_attr::SCMP_FLTATR_CTL_NNP,
       0,
     ))?;
 
-    Errno::result(seccomp_load(*ctx))?;
+    Errno::result(seccomp_load(ctx))?;
   }
 
   Ok(())
@@ -922,9 +909,7 @@ fn run_child(
 
   init_seccomp()?;
 
-  let contents = user_ns_read
-    .recv()
-    .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+  let contents = user_ns_read.recv().map_err(|e| anyhow!("{:?}", e))?;
   ensure!(contents == [1], "user namespace initialisation failed");
   drop(user_ns_read);
 
