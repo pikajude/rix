@@ -3,9 +3,12 @@ use std::collections::HashSet;
 use termcolor::*;
 
 impl Eval {
+  pub fn render<W: WriteColor>(&self, value: &ValueRef, stream: W) -> Result<()> {
+    Printer::new(self, stream).print(value)
+  }
+
   pub fn print(&self, value: &ValueRef) -> Result<()> {
-    let mut printer = Printer::new(self, StandardStream::stderr(ColorChoice::Auto));
-    printer.print(value)
+    self.render(value, StandardStream::stderr(ColorChoice::Auto))
   }
 }
 

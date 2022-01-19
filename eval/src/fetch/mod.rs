@@ -427,11 +427,11 @@ pub fn fetch(
   warn!("check pure-eval");
 
   let store_path = if unpack {
-    crate::fetch::download_tarball(&*eval.store, &url, &name, expected_hash.is_some())?
+    download_tarball(&*eval.store, &url, &name, expected_hash.is_some())?
       .0
       .path
   } else {
-    crate::fetch::download_file(&*eval.store, &url, &name, expected_hash.is_some())?.path
+    download_file(&*eval.store, &url, &name, expected_hash.is_some())?.path
   };
 
   let real_path = eval.store.to_real_path(&store_path);

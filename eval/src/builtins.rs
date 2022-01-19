@@ -21,9 +21,7 @@ struct CompareValues<'a>(Cow<'a, Value>);
 
 impl PartialEq for CompareValues<'_> {
   fn eq(&self, other: &Self) -> bool {
-    if let Some(result) =
-      super::numeric_op(&*self.0, &*other.0, |i1, i2| i1 == i2, |f1, f2| f1 == f2)
-    {
+    if let Some(result) = numeric_op(&*self.0, &*other.0, |i1, i2| i1 == i2, |f1, f2| f1 == f2) {
       result
     } else {
       match (&*self.0, &*other.0) {
@@ -534,7 +532,7 @@ fn test_read_file() -> Result<()> {
   let mut t = tempfile::NamedTempFile::new()?;
   t.write_all(&[0xCF])?;
 
-  Eval::test().assert_err(format!("builtins.readFile {}", t.path().display()));
+  Eval::test().assert_err(format!("builtins.readFile {}", t.path().display()).as_str());
   Ok(())
 }
 
@@ -775,22 +773,17 @@ fn prim_replace_strings(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value
 }
 
 #[test]
-fn test_replace_strings() -> NixResult {
+fn test_replace_strings() {
   let eval = Eval::test();
 
-  eval.assert(
-    r#"
-    builtins.replaceStrings ["-" "."] ["_" "_"] "x86_64-unknown-linux-gnu"
-      == "x86_64_unknown_linux_gnu"
-  "#,
-  )?;
-  eval.assert(
-    r#"
-    builtins.replaceStrings ["q"] ["e"] "jéff" == "jéff"
-  "#,
-  )?;
-
-  ok()
+  eval.eq_text(
+    r#" builtins.replaceStrings ["-" "."] ["_" "_"] "x86_64-unknown-linux-gnu" "#,
+    r#" "x86_64_unknown_linux_gnu" "#,
+  );
+  eval.eq_text(
+    r#" builtins.replaceStrings ["q"] ["e"] "jéff" "#,
+    r#" "jéff" "#,
+  );
 }
 
 lazy_static! {
@@ -831,20 +824,16 @@ fn prim_match(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 }
 
 #[test]
-fn test_match() -> NixResult {
+fn test_match() {
   let eval = Eval::test();
 
-  eval.assert(r#"builtins.match "ab" "abc" == null"#)?;
-  eval.assert(r#"builtins.match "abc" "abc" == []"#)?;
-  eval.assert(r#"builtins.match "a(b)(c)" "abc" == [ "b" "c" ]"#)?;
-  eval.assert(
-    r#"
-    builtins.match "[[:space:]]+([[:upper:]]+)[[:space:]]+" "  FOO   "
-      == [ "FOO" ]
-      "#,
-  )?;
-
-  ok()
+  eval.eq_text(r#" builtins.match "ab" "abc" "#, "null");
+  eval.eq_text(r#" builtins.match "abc" "abc" "#, "[]");
+  eval.eq_text(r#" builtins.match "a(b)(c)" "abc" "#, r#" [ "b" "c" ] "#);
+  eval.eq_text(
+    r#" builtins.match "[[:space:]]+([[:upper:]]+)[[:space:]]+" "  FOO   " "#,
+    r#" [ "FOO" ] "#,
+  );
 }
 
 fn prim_split(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
@@ -887,15 +876,25 @@ fn prim_split(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 }
 
 #[test]
-fn test_split() -> NixResult {
+fn test_split() {
   let eval = Eval::test();
 
-  eval.assert(r#"builtins.split "(a)b" "abc" == [ "" [ "a" ] "c" ]"#)?;
-  eval.assert(r#"builtins.split "([ac])" "abc" == [ "" [ "a" ] "b" [ "c" ] "" ]"#)?;
-  eval.assert(r#"builtins.split "(a)|(c)" "abc" == [ "" [ "a" null ] "b" [ null "c" ] "" ]"#)?;
-  eval.assert(r#"builtins.split "([[:upper:]]+)" "  FOO  " == [ "  " [ "FOO" ] "  " ]"#)?;
-
-  ok()
+  eval.eq_text(
+    r#" builtins.split "(a)b" "abc" "#,
+    r#" [ "" [ "a" ] "c" ] "#,
+  );
+  eval.eq_text(
+    r#" builtins.split "([ac])" "abc" "#,
+    r#" [ "" [ "a" ] "b" [ "c" ] "" ] "#,
+  );
+  eval.eq_text(
+    r#" builtins.split "(a)|(c)" "abc" "#,
+    r#" [ "" [ "a" null ] "b" [ null "c" ] "" ] "#,
+  );
+  eval.eq_text(
+    r#" builtins.split "([[:upper:]]+)" "  FOO  " "#,
+    r#" [ "  " [ "FOO" ] "  " ] "#,
+  );
 }
 
 fn prim_substring(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
@@ -989,16 +988,12 @@ fn prim_foldl_strict(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {
 }
 
 #[test]
-fn test_foldl_strict() -> NixResult {
+fn test_foldl_strict() {
   let e = Eval::test();
-  e.assert(
-    r#"
-    builtins.foldl' (x: y: "${x}-${y}") "a" ["b" "c" "d"]
-      == "a-b-c-d"
-  "#,
-  )?;
-
-  ok()
+  e.eq_text(
+    r#" builtins.foldl' (x: y: "${x}-${y}") "a" ["b" "c" "d"] "#,
+    r#" "a-b-c-d" "#,
+  );
 }
 
 fn prim_try_eval(eval: &Eval, pos: Pos, args: PrimopArgs) -> Result<Value> {

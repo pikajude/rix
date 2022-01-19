@@ -216,7 +216,7 @@ impl Deref for Hash {
 }
 
 impl Debug for Hash {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
     f.debug_tuple("Hash")
       .field(&format!("{}:{}", self.ty, self.encode(Encoding::Base32)))
       .finish()

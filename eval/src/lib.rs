@@ -905,30 +905,39 @@ fn pos_to_value(pos: Pos) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
+  use termcolor::NoColor;
+
   use super::{Eval, Value};
   use crate::util::*;
 
   impl Eval {
-    pub(crate) fn assert<I: AsRef<str>>(&self, input: I) -> Result<()> {
-      let input = input.as_ref();
-      let expr = self.eval_inline(input)?;
+    pub(crate) fn assert(&self, input: &str) {
+      let expr = self.eval_inline(input).expect("eval failure");
       match expr {
         Value::Bool(b) => assert!(b, "assertion failed: {}", input),
-        v => bail!(
+        v => panic!(
           "assert_true expects a bool expression, but got {}",
           v.typename()
         ),
       }
-      Ok(())
     }
 
-    pub(crate) fn assert_err<I: AsRef<str>>(&self, input: I) {
-      let input = input.as_ref();
+    pub(crate) fn assert_err(&self, input: &str) {
       assert!(
         self.eval_inline(input).is_err(),
         "expected evaluation to fail for:\n  {}",
         input
       )
+    }
+
+    pub(crate) fn eq_text(&self, input: &str, expected: &str) {
+      let val = self.eval_inline(input).expect("eval failure");
+      let mut buf = vec![];
+      self
+        .render(&crate::vref(val), NoColor::new(&mut buf))
+        .expect("print failure");
+      let s = String::from_utf8(buf).expect("rendered output is wrong");
+      assert_eq!(s, expected.trim(), "output did not match");
     }
   }
 
@@ -942,34 +951,33 @@ mod tests {
   }
 
   #[test]
-  fn test_recursive() -> NixResult {
+  fn test_recursive() {
     let e = Eval::test();
 
-    e.assert("let a = { b = 1; }; inherit (a) b; in b == 1")?;
-
-    ok()
+    e.assert("let a = { b = 1; }; inherit (a) b; in b == 1");
   }
 
   #[test]
-  fn test_attrs_equality() -> NixResult {
+  fn test_attrs_equality() {
     let e = Eval::test();
 
-    e.assert("let x = { f = _: 1; }; in x == x")?;
-    e.assert("let x = { f = _: 1; }; in x != { inherit (x) f; }")?;
-    e.assert("let x.f = { y = _: 1; }; in x == { inherit (x) f; }")?;
+    e.assert("let x = { f = _: 1; }; in x == x");
+    e.assert("let x = { f = _: 1; }; in x != { inherit (x) f; }");
+    e.assert("let x.f = { y = _: 1; }; in x == { inherit (x) f; }");
 
-    e.assert("let x = { f = _: 1; }; in x != x // { inherit (x) f; }")?;
-    e.assert("let x = { f = _: 1; }; in x == { inherit (x) f; } // x")?;
-    e.assert(r#"let x = { f = _: 1; }; in x == builtins.removeAttrs (x // { g = 1; }) ["g"]"#)?;
-
-    ok()
+    e.assert("let x = { f = _: 1; }; in x != x // { inherit (x) f; }");
+    e.assert("let x = { f = _: 1; }; in x == { inherit (x) f; } // x");
+    e.assert(r#"let x = { f = _: 1; }; in x == builtins.removeAttrs (x // { g = 1; }) ["g"]"#);
   }
 
   #[test]
   fn test_map_attrs() -> NixResult {
     let e = Eval::test();
 
-    e.assert("builtins.mapAttrs (x: y: y + 10) { x = 1; y = 2; } == { x = 11; y = 12; }")?;
+    e.eq_text(
+      "builtins.mapAttrs (x: y: y + 10) { x = 1; y = 2; }",
+      "{ x = 11; y = 12; }",
+    );
 
     ok()
   }

@@ -79,7 +79,7 @@ macro_rules! unwrap {
 #[error("{err}")]
 pub struct LocatedStdError {
   pub pos: Pos,
-  pub err: Box<dyn std::error::Error + Send + Sync>,
+  pub err: Box<dyn Error + Send + Sync>,
 }
 
 impl LocatedError for LocatedStdError {
